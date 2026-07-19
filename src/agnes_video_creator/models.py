@@ -123,6 +123,7 @@ class Script:
         """
         char_section = ""
         dialogue_field = ""
+        narration_hint = ""
         if character_info:
             char_section = f"""
 Known characters:
@@ -134,6 +135,7 @@ For each scene, include a "character_appearances" field listing which characters
         {"character": "角色名", "line": "spoken dialogue text in Chinese"},
         {"character": "另一个角色", "line": "their reply in Chinese"}
       ],"""
+            narration_hint = ", or leave empty if dialogues cover it"
         return f"""You are a professional short-video scriptwriter. Given a topic, produce a detailed storyboard.
 
 Output **only** valid JSON with this exact structure — no markdown fences, no commentary:
@@ -148,7 +150,7 @@ Output **only** valid JSON with this exact structure — no markdown fences, no 
   "scenes": [
     {{
       "id": 1,
-      "narration": "Voice-over text in Chinese, 1-2 sentences{n', or leave empty if dialogues cover it' if character_info else ''}",
+      "narration": "Voice-over text in Chinese, 1-2 sentences{narration_hint}",
       "visual_prompt": "Detailed English image/video generation prompt: subject, action, environment, lighting, camera, style, quality",{dialogue_field}
       "duration_seconds": 5.0,
       "camera": "Camera movement (in Chinese)",

@@ -351,6 +351,7 @@ async def main():
             await communicate.save(str(out_path))
             audio_clips.append({
                 "id": sid, "type": "narration", "character": "",
+                "text": narration,
                 "path": str(out_path),
                 "duration": scene.get("duration_seconds", 5.0),
             })
@@ -368,8 +369,9 @@ async def main():
             await communicate.save(str(out_path))
             audio_clips.append({
                 "id": sid, "type": "dialogue", "character": char_name,
+                "text": f"{char_name}: {line}" if char_name else line,
                 "path": str(out_path),
-                "duration": 2.5,  # approximate per dialogue line
+                "duration": 2.5,
             })
             clip_index += 1
     
@@ -455,25 +457,6 @@ def _add_narration(
             print("  ⚠ No audio manifest generated, skipping narration", file=sys.stderr)
         return video_path
 
-    # Mix audio with video, allowing audio to be longer than video
-    output = temp_dir / "with_narration.mp4"
-    cmd = [
-        "ffmpeg",
-        "-y",
-        "-i", str(video_path),
-        "-f", "concat",
-        "-safe", "0",
-        "-i", str(audio_manifest),
-        # Mix audio tracks, shorten or repeat to fit
-        "-filter_complex",
-        "[1:a]aresample=async=1:first_pts=0[aud];[0:a][aud]amix=inputs=2:duration=first",
-        "-c:v", "copy",
-        "-c:a", "aac",
-        "-b:a", "128k",
-        "-movflags", "+faststart",
-        str(output),
-    ]
-
     # Concatenate all audio clips in manifest order (narration + dialogue interleaved)
     manifest_data = json.loads(audio_manifest.read_text())
     if not manifest_data:
@@ -524,6 +507,95 @@ def _add_narration(
     ]
 
     _run_ffmpeg(cmd, "add narration audio", verbose)
+
+    if output.exists():
+        if cfg.add_subtitles:
+            output = _burn_subtitles(
+                output, manifest_data, temp_dir, cfg, verbose
+            )
+        return output
+    return video_path
+
+
+# ── Subtitles ───────────────────────────────────────────────────────────
+
+
+def _generate_srt(manifest_data: list[dict]) -> str:
+    """Generate SRT subtitle content from the audio manifest.
+
+    Each manifest entry has "text" and "duration" fields.  Timing is
+    derived from cumulative durations of preceding clips.
+    """
+    lines: list[str] = []
+    seq = 0
+    cursor = 0.0
+
+    def _ts(sec: float) -> str:
+        m, s = divmod(sec, 60)
+        h, m = divmod(m, 60)
+        cs = int((s - int(s)) * 1000)
+        return f"{int(h):02d}:{int(m):02d}:{int(s):02d},{cs:03d}"
+
+    for clip in manifest_data:
+        text = clip.get("text", "")
+        if not text:
+            cursor += clip.get("duration", 0.0)
+            continue
+        dur = clip.get("duration", 2.5)
+        seq += 1
+        start = cursor
+        end = cursor + dur
+        lines.append(str(seq))
+        lines.append(f"{_ts(start)} --> {_ts(end)}")
+        lines.append(text)
+        lines.append("")
+        cursor = end
+
+    return "\n".join(lines)
+
+
+def _burn_subtitles(
+    video_path: Path,
+    manifest_data: list[dict],
+    temp_dir: Path,
+    cfg: AgnesConfig,
+    verbose: bool,
+) -> Path:
+    """Burn subtitles (SRT) into the video.
+
+    Falls back to the original video if ffmpeg fails or no text found.
+    """
+    if not manifest_data:
+        return video_path
+
+    srt_content = _generate_srt(manifest_data)
+    if not srt_content.strip():
+        return video_path
+
+    srt_path = temp_dir / "subtitles.srt"
+    srt_path.write_text(srt_content, encoding="utf-8")
+
+    # Escape path for ffmpeg subtitles filter (colons and quotes)
+    srt_escaped = str(srt_path).replace("\\", "/").replace(":", "\\:")
+    # Wrap in single quotes if path contains spaces
+    if " " in srt_escaped:
+        srt_escaped = f"'\\''{srt_escaped}'\\''"
+
+    output = temp_dir / "with_subs.mp4"
+    cmd = [
+        "ffmpeg", "-y",
+        "-i", str(video_path),
+        "-vf", f"subtitles={srt_escaped}",
+        "-c:a", "copy",
+        "-c:v", "libx264",
+        "-preset", "fast",
+        "-crf", "18",
+        "-pix_fmt", "yuv420p",
+        "-movflags", "+faststart",
+        str(output),
+    ]
+
+    _run_ffmpeg(cmd, "burn subtitles", verbose)
 
     if output.exists():
         return output
