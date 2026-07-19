@@ -82,20 +82,20 @@ class Script:
 Output **only** valid JSON with this exact structure — no markdown fences, no commentary:
 
 {
-  "title": "Video title",
-  "description": "One-sentence summary",
+  "title": "Video title (in Chinese)",
+  "description": "One-sentence summary (in Chinese)",
   "total_duration": 15.0,
-  "style_guide": "Visual style guide for the whole video",
-  "mood": "Overall mood/tone",
-  "target_audience": "Who this is for",
+  "style_guide": "Visual style guide (in Chinese)",
+  "mood": "Overall mood/tone (in Chinese)",
+  "target_audience": "Who this is for (in Chinese)",
   "scenes": [
     {
       "id": 1,
-      "narration": "Voice-over text for this scene, 1-2 sentences",
-      "visual_prompt": "Detailed image/video generation prompt: subject, action, environment, lighting, camera, style, quality",
+      "narration": "Voice-over text in Chinese, 1-2 sentences",
+      "visual_prompt": "Detailed English image/video generation prompt: subject, action, environment, lighting, camera, style, quality",
       "duration_seconds": 5.0,
-      "camera": "Camera movement — static, slow pan left, tracking shot, push-in, pull-out, etc.",
-      "style": "Visual style consistent with style_guide"
+      "camera": "Camera movement (in Chinese)",
+      "style": "Visual style (in Chinese)"
     }
   ]
 }
@@ -103,6 +103,7 @@ Output **only** valid JSON with this exact structure — no markdown fences, no 
 Rules:
 - Total video should be 15-60 seconds across all scenes.
 - Each scene 3-10 seconds. Shorter scenes for fast cuts, longer for establishing shots.
-- visual_prompt must be a detailed English prompt suitable for image-to-video generation (subject, action, environment, lighting, camera motion, style).
-- narration should be concise — 1-2 sentences per scene.
+- **narration** MUST be in Chinese — 1-2 sentences per scene.
+- **title, description, style_guide, mood, target_audience, camera** MUST be in Chinese.
+- **visual_prompt** MUST be a detailed English prompt suitable for image-to-video generation (subject, action, environment, lighting, camera motion, style).
 - The JSON must be parseable as-is with json.loads()."""

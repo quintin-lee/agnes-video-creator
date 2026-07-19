@@ -327,6 +327,7 @@ except ImportError:
 async def main():
     script_path = sys.argv[1]
     output_dir = Path(sys.argv[2])
+    voice = sys.argv[3] if len(sys.argv) > 3 else "zh-CN-XiaoxiaoNeural"
     data = json.loads(Path(script_path).read_text())
     
     audio_clips = []
@@ -337,10 +338,7 @@ async def main():
         sid = scene.get("id", 0)
         out_path = output_dir / f"narration_{sid:03d}.mp3"
         
-        communicate = edge_tts.Communicate(
-            narration,
-            "en-US-JennyNeural"  # default voice
-        )
+        communicate = edge_tts.Communicate(narration, voice)
         await communicate.save(str(out_path))
         audio_clips.append({
             "id": sid,
@@ -398,10 +396,10 @@ def _add_narration(
     audio_dir.mkdir(parents=True, exist_ok=True)
 
     if verbose:
-        print("  Generating narration audio (edge-tts)...", file=sys.stderr)
+        print(f"  Generating narration audio (edge-tts, voice: {cfg.tts_voice})...", file=sys.stderr)
 
     result = subprocess.run(
-        [sys.executable, str(nar_script), str(script_json), str(audio_dir)],
+        [sys.executable, str(nar_script), str(script_json), str(audio_dir), cfg.tts_voice],
         capture_output=True,
         text=True,
     )

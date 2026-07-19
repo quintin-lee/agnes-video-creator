@@ -51,7 +51,8 @@ class AgnesConfig:
     transition_duration: float = 0.5  # seconds
     target_fps: int = 24
     add_audio: bool = True
-    audio_lang: str = "en"
+    audio_lang: str = "zh"
+    tts_voice: str = "zh-CN-XiaoxiaoNeural"
 
     # ── Reference video analysis ──────────────────────────────────────
     ref_num_frames: int = 3  # frames to extract for style analysis
@@ -99,4 +100,6 @@ class AgnesConfig:
             output_dir=os.environ.get("AGNES_OUTPUT_DIR", "agnes_video_output"),
             translate_prompts=os.environ.get("AGNES_TRANSLATE", "1") != "0",
             add_audio=os.environ.get("AGNES_AUDIO", "1") != "0",
+            audio_lang=os.environ.get("AGNES_AUDIO_LANG", "zh"),
+            tts_voice=os.environ.get("AGNES_TTS_VOICE", "zh-CN-XiaoxiaoNeural"),
         )
