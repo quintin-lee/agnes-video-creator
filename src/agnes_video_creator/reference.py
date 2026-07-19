@@ -1,20 +1,23 @@
 """Reference video analysis — extract visual style from a reference video.
 
 Pipeline:
-  1. Extract key frames from the reference video via ffmpeg.
-  2. Encode frames as base64 data URIs (small JPEG).
-  3. Send frames to Agnes 2.0 Flash for visual style analysis.
-  4. Build a structured StyleProfile JSON.
-  5. Generate a new script that applies the reference style to a user topic.
+  1. Download reference video from URL (if needed), or use local file.
+  2. Extract key frames from the reference video via ffmpeg.
+  3. Encode frames as base64 data URIs (small JPEG).
+  4. Send frames to Agnes 2.0 Flash for visual style analysis.
+  5. Build a structured StyleProfile JSON.
+  6. Generate a new script that applies the reference style to a user topic.
 """
 
 from __future__ import annotations
 
 import base64
 import json
+import os
 import re
 import subprocess
 import sys
+import urllib.request
 from pathlib import Path
 from typing import Any
 
@@ -84,6 +87,64 @@ class StyleProfile:
         if self.key_visual_elements:
             lines.append(f"Key elements:   {self.key_visual_elements[:120]}")
         return "\n".join(lines)
+
+
+# ── URL download ──────────────────────────────────────────────────────
+
+
+def _resolve_video_source(src: str, temp_dir: Path, *, verbose: bool = True) -> str:
+    """Return a local path to the video.
+
+    If *src* is an HTTP(S) URL, download it to *temp_dir* first.
+    Otherwise return *src* unchanged (local file).
+    """
+    if not src.startswith(("http://", "https://")):
+        path = Path(src)
+        if not path.exists():
+            raise SystemExit(f"Reference video not found: {src}")
+        return str(path.resolve())
+
+    # ── URL download ─────────────────────────────────────────────
+    if verbose:
+        print(f"  Downloading reference video from URL...", file=sys.stderr)
+
+    # Determine filename from URL or fallback
+    url_path = urllib.request.urlparse(src).path
+    filename = os.path.basename(url_path) if url_path else "reference_video.mp4"
+    if not filename or "." not in filename:
+        filename = "reference_video.mp4"
+
+    dest = temp_dir / filename
+    if dest.exists():
+        if verbose:
+            print(f"  Already cached: {dest}", file=sys.stderr)
+        return str(dest)
+
+    try:
+        def _report(block_count: int, block_size: int, total_size: int) -> None:
+            if verbose and total_size > 0:
+                downloaded = block_count * block_size / (1024 * 1024)
+                total_mb = total_size / (1024 * 1024)
+                print(
+                    f"    Downloaded: {downloaded:.1f} / {total_mb:.1f} MB",
+                    end="\r",
+                    file=sys.stderr,
+                )
+
+        urllib.request.urlretrieve(src, str(dest), reporthook=_report)
+        if verbose:
+            print(file=sys.stderr)  # newline after progress
+    except Exception as exc:
+        raise SystemExit(f"Failed to download reference video: {exc}") from exc
+
+    if not dest.exists() or dest.stat().st_size == 0:
+        raise SystemExit(f"Downloaded file is empty or missing: {dest}")
+
+    mb = dest.stat().st_size / (1024 * 1024)
+    if verbose:
+        print(f"  ✓ Saved to: {dest} ({mb:.1f} MB)", file=sys.stderr)
+
+    return str(dest)
 
 
 # ── Frame extraction ───────────────────────────────────────────────────
@@ -413,17 +474,21 @@ def analyze_reference_video(
     num_frames: int = 3,
     verbose: bool = True,
 ) -> StyleProfile:
-    """Full pipeline: extract frames → encode → analyze → return profile."""
+    """Full pipeline: resolve URL → extract frames → encode → analyze → return profile."""
     if verbose:
-        print(f"\n  Analyzing reference video: {video_path}", file=sys.stderr)
+        print(f"\n  Reference video: {video_path}", file=sys.stderr)
 
     cfg.ensure_dirs()
+
+    # Step 0: resolve URL (download if needed)
+    local_path = _resolve_video_source(video_path, cfg.resolved_temp, verbose=verbose)
+
     frames_dir = cfg.resolved_temp / "ref_frames"
 
     # Step 1: extract frames
     if verbose:
         print(f"  Extracting {num_frames} frame(s)...", file=sys.stderr)
-    frames = extract_frames(video_path, frames_dir, num_frames=num_frames)
+    frames = extract_frames(local_path, frames_dir, num_frames=num_frames)
     if not frames:
         raise SystemExit("No frames could be extracted from the reference video.")
 

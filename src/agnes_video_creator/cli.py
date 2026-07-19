@@ -315,7 +315,7 @@ def build_parser() -> argparse.ArgumentParser:
         "ref-create",
         help="Generate a video that mimics a reference video's visual style",
     )
-    ref.add_argument("reference", help="Path to the reference video file")
+    ref.add_argument("reference", help="Path or URL of the reference video")
     ref.add_argument("topic", help="Description of the new video content")
     ref.add_argument("--style", help="Additional style hint (merged with reference)")
     ref.add_argument("--duration", type=float, default=15.0, help="Target duration in seconds")
