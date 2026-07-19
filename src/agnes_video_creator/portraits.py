@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any
 
 from agnes_video_creator.config import AgnesConfig
+from agnes_video_creator.face_analyzer import analyze_face
 from agnes_video_creator.models import Character, Script
 from agnes_video_creator.utils import (
     download_file,
@@ -98,7 +99,6 @@ def generate_character_portraits(
 
         char.portrait_url = url
 
-        # Download locally
         safe_name = f"portrait_{slugify(char.name)[:20]}"
         local_path = portraits_dir / f"{safe_name}.png"
         try:
@@ -109,6 +109,18 @@ def generate_character_portraits(
         except Exception as exc:
             if verbose:
                 print(f"    ⚠ Download failed: {exc}", file=sys.stderr)
+            continue
+
+        if not char.face_features or not char.face_features.is_populated():
+            if verbose:
+                print(f"    Analyzing facial features...", file=sys.stderr)
+            ff = analyze_face(char.portrait_url, cfg, verbose=verbose)
+            if ff is not None and ff.is_populated():
+                char.face_features = ff
+                if verbose:
+                    print(f"    ✓ Face features stored ({len(ff.distinctive_features)} distinctive marks)", file=sys.stderr)
+            elif verbose:
+                print(f"    ⚠ No face detected — will fall back to text prompt", file=sys.stderr)
 
     return script
 

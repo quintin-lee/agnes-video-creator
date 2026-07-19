@@ -9,6 +9,82 @@ from typing import Any
 
 
 @dataclass
+class FaceFeatures:
+    """Structured facial features extracted from a character portrait.
+
+    Used for prompt-level face locking: instead of vague "appearance"
+    descriptions, these concrete features are injected into every scene
+    prompt so the model produces consistent faces.
+    """
+
+    face_shape: str = ""  # oval, round, square, heart, diamond, long
+    eye_shape: str = ""  # round, almond, hooded, monolid, downturned
+    eye_color: str = ""  # dark brown, light brown, blue, green, grey, hazel
+    eyebrow: str = ""  # straight, arched, thick, thin, bushy
+    nose: str = ""  # straight, aquiline, button, wide, narrow, pointed
+    mouth_lips: str = ""  # full, thin, wide, small, cupid bow
+    jaw_chin: str = ""  # strong jaw, pointed chin, round chin, soft jaw
+    skin_tone: str = ""  # fair, light, medium, tan, olive, brown, dark
+    skin_texture: str = ""  # smooth, freckled, weathered, clear
+    hair_style: str = ""  # short, long, curly, straight, wavy, ponytail, bun, bald
+    hair_color: str = ""  # black, brown, blonde, red, grey, white, dyed
+    age_range: str = ""  # child, teen, young adult, middle-aged, elderly
+    gender_presentation: str = ""  # masculine, feminine, androgynous
+    distinctive_features: list[str] = field(default_factory=list)
+    # e.g. ["scar on left cheek", "mole above lip", "glasses"]
+
+    def to_prompt_snippet(self) -> str:
+        """Convert to a concrete face description for prompt injection.
+
+        The result is a dense English phrase that the image/video model
+        can follow precisely, e.g.:
+          "Face: oval, almond eyes dark brown, straight nose, full lips,
+           strong jaw. Skin: medium, smooth. Hair: long black straight.
+           Age: young adult."
+        """
+        parts = []
+        face_desc = ", ".join(
+            filter(None, [
+                self.face_shape,
+                f"{self.eye_shape} eyes {self.eye_color}" if self.eye_shape else "",
+                f"{self.eyebrow} eyebrows" if self.eyebrow else "",
+                f"{self.nose} nose" if self.nose else "",
+                f"{self.mouth_lips} lips" if self.mouth_lips else "",
+                f"{self.jaw_chin}" if self.jaw_chin else "",
+            ])
+        )
+        if face_desc:
+            parts.append(f"Face: {face_desc}")
+
+        skin_desc = ", ".join(
+            filter(None, [self.skin_tone, self.skin_texture])
+        )
+        if skin_desc:
+            parts.append(f"S: {skin_desc}")
+
+        hair_desc = ", ".join(
+            filter(None, [self.hair_style, self.hair_color])
+        )
+        if hair_desc:
+            parts.append(f"Hair: {hair_desc}")
+
+        if self.age_range:
+            parts.append(f"Age: {self.age_range}")
+
+        if self.gender_presentation:
+            parts.append(f"Gender: {self.gender_presentation}")
+
+        if self.distinctive_features:
+            parts.append("Features: " + "; ".join(self.distinctive_features))
+
+        return ". ".join(parts)
+
+    def is_populated(self) -> bool:
+        """True if at least one meaningful feature was extracted."""
+        return bool(self.face_shape or self.eye_shape or self.skin_tone or self.hair_style)
+
+
+@dataclass
 class Character:
     """A character in the video story."""
 
@@ -19,6 +95,7 @@ class Character:
     portrait_path: str = ""  # local path to reference portrait image
     portrait_url: str = ""  # URL of generated portrait
     seed: int = 0  # consistent seed for image generation (0 = random)
+    face_features: FaceFeatures | None = None  # face locking data
 
 
 @dataclass

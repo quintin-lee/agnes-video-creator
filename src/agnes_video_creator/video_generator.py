@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Any
 
 from agnes_video_creator.config import AgnesConfig
-from agnes_video_creator.models import Script
+from agnes_video_creator.models import Character, Script
 from agnes_video_creator.utils import (
     download_file,
     poll_video_task,
@@ -60,6 +60,31 @@ def generate_video_clips(
     return script
 
 
+# ── Helpers ─────────────────────────────────────────────────────────────
+
+
+def _inject_face_features(
+    visual_prompt: str,
+    scene_characters: list[str],
+    script: Script,
+) -> str:
+    """Inject face features into prompt, preferring FaceFeatures over
+    generic appearance text."""
+    if not scene_characters or not script.characters:
+        return visual_prompt
+    injections: list[str] = []
+    for ch in script.characters:
+        if ch.name not in scene_characters:
+            continue
+        if ch.face_features and ch.face_features.is_populated():
+            injections.append(f"{ch.name}: {ch.face_features.to_prompt_snippet()}")
+        elif ch.appearance:
+            injections.append(f"{ch.name}: {ch.appearance}")
+    if not injections:
+        return visual_prompt
+    return f"Characters: {'; '.join(injections)}. {visual_prompt}"
+
+
 # ── Per-scene generation (text-to-video / image-to-video) ────────────
 
 
@@ -87,9 +112,8 @@ def _render_scenes(
                 file=sys.stderr,
             )
 
-        # Inject character appearances into the visual prompt
-        enriched = script.inject_characters(
-            scene.visual_prompt, scene.character_appearances
+        enriched = _inject_face_features(
+            scene.visual_prompt, scene.character_appearances, script
         )
         final_prompt, orig = prepare_prompt(enriched, cfg)
 
