@@ -39,6 +39,8 @@ class AgnesConfig:
     request_base_delay: float = 4.0  # initial backoff seconds (doubles each retry)
     request_max_delay: float = 120.0  # cap on backoff per retry
     request_timeout: int = 3600  # seconds per HTTP request (text/image/video creation)
+    poll_interval: float = 10.0  # seconds between poll requests
+    poll_timeout: float = 1800.0  # max seconds to wait for video completion
 
     # ── Output ───────────────────────────────────────────────────────
     output_dir: str = "agnes_video_output"
