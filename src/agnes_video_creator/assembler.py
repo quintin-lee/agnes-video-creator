@@ -83,11 +83,12 @@ def assemble_video(
             file=sys.stderr,
         )
 
-    # ── Step 1: Normalise all clips to consistent settings ─────
+    # ── Step 1: Normalise all clips with camera motion ─────────
     normalised = []
     for i, clip in enumerate(clip_paths):
         norm_path = temp_dir / f"norm_{i:04d}.mp4"
-        _normalise_clip(clip, norm_path, cfg, verbose)
+        camera = script.scenes[i].camera if i < len(script.scenes) else ""
+        _normalise_clip(clip, norm_path, cfg, verbose, camera_desc=camera)
         normalised.append(norm_path)
 
     # ── Step 2: Generate concat file ────────────────────────────
@@ -150,17 +151,88 @@ def _run_ffmpeg(cmd: list[str], description: str = "", verbose: bool = True) -> 
         raise SystemExit(f"ffmpeg failed ({description}): {exc}") from exc
 
 
+def _camera_motion_filter(
+    camera_desc: str,
+    duration: float,
+    fps: int = 24,
+    width: int = 1152,
+    height: int = 768,
+) -> str:
+    """Map a Chinese/English camera description to an ffmpeg video filter.
+
+    Returns an empty string when no motion should be applied.
+    """
+    desc = camera_desc.lower()
+
+    # Zoom effects
+    if any(k in desc for k in ("zoom", "push in", "dolly in", "close-up", "closeup", "close up")):
+        return f"zoompan=z='min(zoom+0.005,1.3)':d={int(duration * fps)}:s={width}x{height}:fps={fps}"
+    if any(k in desc for k in ("zoom out", "pull out", "dolly out", "wide")):
+        return f"zoompan=z='max(zoom-0.005,0.8)':d={int(duration * fps)}:s={width}x{height}:fps={fps}"
+
+    # Pan effects
+    if "pan left" in desc:
+        return f"crop=iw-50:ih:(iw-50)*(t/{duration}):0"
+    if "pan right" in desc:
+        return f"crop=iw-50:ih:(iw-50)*(1-t/{duration}):0"
+    if any(k in desc for k in ("pan up", "tilt up")):
+        return f"crop=iw:ih-50:0:(ih-50)*(t/{duration})"
+    if any(k in desc for k in ("pan down", "tilt down")):
+        return f"crop=iw:ih-50:0:(ih-50)*(1-t/{duration})"
+
+    # Tracking / follow
+    if any(k in desc for k in ("track", "follow", "dolly")):
+        return f"zoompan=z='min(zoom+0.003,1.2)':d={int(duration * fps)}:s={width}x{height}:fps={fps}"
+
+    # Rotation / Dutch angle
+    if any(k in desc for k in ("rotate", "dutch", "tilted")):
+        return "rotate=2*PI*t/5:ow=1.2*iw:oh=1.2*ih,crop=iw/1.2:ih/1.2"
+
+    # Aerial / crane
+    if any(k in desc for k in ("aerial", "crane", "bird", "overhead")):
+        return f"zoompan=z='max(zoom-0.008,0.7)':d={int(duration * fps)}:s={width}x{height}:fps={fps}"
+
+    # Handheld / shaking
+    if any(k in desc for k in ("handheld", "shake", "shaky", "camera shake")):
+        return "crop=iw-20:ih-20:random(0)*20:random(1)*20"
+
+    # Static / default — no filter
+    return ""
+
+
 def _normalise_clip(
-    src: Path, dst: Path, cfg: AgnesConfig, verbose: bool
+    src: Path,
+    dst: Path,
+    cfg: AgnesConfig,
+    verbose: bool,
+    camera_desc: str = "",
 ) -> None:
-    """Normalise a video clip to target FPS and consistent encoding."""
+    """Normalise a video clip, optionally applying camera motion.
+
+    camera_desc is a Chinese/English camera-motion description (e.g.
+    "slow zoom in", "pan right", "handheld").
+    """
     if dst.exists():
         return
+
+    # Build video filter chain
+    filters = [f"fps={cfg.target_fps}"]
+    if camera_desc:
+        motion = _camera_motion_filter(
+            camera_desc, 5.0,
+            fps=cfg.target_fps,
+            width=cfg.video_width,
+            height=cfg.video_height,
+        )
+        if motion:
+            filters.append(motion)
+    vf = ",".join(filters)
+
     cmd = [
         "ffmpeg",
         "-y",
         "-i", str(src),
-        "-vf", f"fps={cfg.target_fps}",
+        "-vf", vf,
         "-c:v", "libx264",
         "-preset", "fast",
         "-crf", "18",

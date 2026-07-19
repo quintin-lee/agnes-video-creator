@@ -164,6 +164,7 @@ Rules:
 - Each scene 3-10 seconds. Shorter scenes for fast cuts, longer for establishing shots.
 - **narration** MUST be in Chinese — 1-2 sentences per scene. If characters have dialogues, narration provides context.
 - **title, description, style_guide, mood, target_audience, camera** MUST be in Chinese.
+- **camera** field describes camera motion per scene, e.g. "缓慢推近" (slow zoom in), "向右平移" (pan right), "跟拍" (tracking), "手持晃动" (handheld), "航拍俯视" (aerial), "特写推近" (close-up dolly). Be specific.
 - **visual_prompt** MUST be a detailed English prompt suitable for image-to-video generation (subject, action, environment, lighting, camera motion, style). When characters appear, describe them in the visual_prompt as directed by their appearance.
 - When characters are provided, include **dialogues** for character interactions — each line spoken by a character in Chinese.
 - The JSON must be parseable as-is with json.loads()."""
