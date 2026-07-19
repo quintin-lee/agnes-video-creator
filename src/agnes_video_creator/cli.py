@@ -24,6 +24,7 @@ from agnes_video_creator.assembler import assemble_video
 from agnes_video_creator.config import AgnesConfig
 from agnes_video_creator.image_generator import generate_scene_images
 from agnes_video_creator.models import Script
+from agnes_video_creator.novel import novel_to_episodes
 from agnes_video_creator.reference import analyze_reference_video, generate_reference_script
 from agnes_video_creator.script_generator import generate_script
 from agnes_video_creator.utils import json_pretty
@@ -287,6 +288,46 @@ def cmd_ref_create(args: argparse.Namespace) -> None:
             print(f"\n✓ Final video: {output_path}", file=sys.stderr)
 
 
+def cmd_novel(args: argparse.Namespace) -> None:
+    """Import a novel text file and generate episode scripts."""
+    cfg = _build_cfg(args)
+    _require_key(cfg)
+
+    # Read novel text
+    novel_path = Path(args.file)
+    if not novel_path.exists():
+        raise SystemExit(f"Novel file not found: {args.file}")
+    text = novel_path.read_text(encoding="utf-8")
+
+    if not args.quiet:
+        print(f"\nReading novel: {novel_path.name} ({len(text)} chars)", file=sys.stderr)
+
+    scripts = novel_to_episodes(text, cfg, max_episodes=args.episodes, verbose=not args.quiet)
+
+    # Save each episode
+    cfg.ensure_dirs()
+    saved = []
+    for i, script in enumerate(scripts):
+        if args.episode:
+            # Only save the requested episode
+            ep_path = cfg.resolved_output / f"episode_{script.episode:02d}.json"
+            script.save(ep_path)
+            saved.append(str(ep_path))
+            if not args.quiet:
+                print(f"\n  Episode {script.episode} saved: {ep_path}", file=sys.stderr)
+            return
+
+        ep_path = cfg.resolved_output / f"episode_{script.episode:02d}.json"
+        script.save(ep_path)
+        saved.append(str(ep_path))
+
+    if not args.quiet:
+        print(f"\n✓ {len(saved)} episode script(s) saved to {cfg.resolved_output}/", file=sys.stderr)
+        for p in saved:
+            print(f"    {p}", file=sys.stderr)
+        print(f"\nNext: agnes-video scenes episodes/episode_01.json", file=sys.stderr)
+
+
 def cmd_status(args: argparse.Namespace) -> None:
     """Display the current status of a saved script."""
     script = _load_script(args.script)
@@ -395,6 +436,15 @@ def build_parser() -> argparse.ArgumentParser:
     status = sub.add_parser("status", help="Show script/scene status")
     status.add_argument("script", help="Script JSON file path")
     status.set_defaults(func=cmd_status)
+
+    # ── novel ─────────────────────────────────────────────────────
+    novel = sub.add_parser("novel", help="Import novel text and generate episode scripts")
+    novel.add_argument("file", help="Path to the novel text file (.txt)")
+    novel.add_argument("--episodes", type=int, default=4,
+                       help="Max episodes to generate (default: 4)")
+    novel.add_argument("--episode", type=int, default=0,
+                       help="Generate only this specific episode number (default: all)")
+    novel.set_defaults(func=cmd_novel)
 
     return parser
 
