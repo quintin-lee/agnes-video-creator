@@ -146,6 +146,7 @@ def _parse_script_json(raw: str, fallback_title: str) -> Script:
             camera=s.get("camera", "static"),
             style=s.get("style", "cinematic"),
             character_appearances=s.get("character_appearances", []),
+            dialogues=s.get("dialogues", []),
         )
         for i, s in enumerate(scenes_raw)
     ]

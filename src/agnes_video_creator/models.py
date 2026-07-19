@@ -33,6 +33,8 @@ class Scene:
     video_url: str = ""
     video_path: str = ""
     character_appearances: list[str] = field(default_factory=list)
+    dialogues: list[dict] = field(default_factory=list)
+    # Each dialogue: {"character": "name", "line": "spoken text"}
 
     @property
     def is_image_ready(self) -> bool:
@@ -120,12 +122,18 @@ class Script:
             character-aware scenes with character_appearances per scene.
         """
         char_section = ""
+        dialogue_field = ""
         if character_info:
             char_section = f"""
 Known characters:
 {character_info}
 
 For each scene, include a "character_appearances" field listing which characters appear."""
+            dialogue_field = """
+      "dialogues": [
+        {"character": "角色名", "line": "spoken dialogue text in Chinese"},
+        {"character": "另一个角色", "line": "their reply in Chinese"}
+      ],"""
         return f"""You are a professional short-video scriptwriter. Given a topic, produce a detailed storyboard.
 
 Output **only** valid JSON with this exact structure — no markdown fences, no commentary:
@@ -140,19 +148,20 @@ Output **only** valid JSON with this exact structure — no markdown fences, no 
   "scenes": [
     {{
       "id": 1,
-      "narration": "Voice-over text in Chinese, 1-2 sentences",
-      "visual_prompt": "Detailed English image/video generation prompt: subject, action, environment, lighting, camera, style, quality",
+      "narration": "Voice-over text in Chinese, 1-2 sentences{n', or leave empty if dialogues cover it' if character_info else ''}",
+      "visual_prompt": "Detailed English image/video generation prompt: subject, action, environment, lighting, camera, style, quality",{dialogue_field}
       "duration_seconds": 5.0,
       "camera": "Camera movement (in Chinese)",
       "style": "Visual style (in Chinese)"
     }}
   ]
-}}{'' if char_section else ''}
+}}
 
 Rules:
 - Total video should be 15-60 seconds across all scenes.
 - Each scene 3-10 seconds. Shorter scenes for fast cuts, longer for establishing shots.
-- **narration** MUST be in Chinese — 1-2 sentences per scene.
+- **narration** MUST be in Chinese — 1-2 sentences per scene. If characters have dialogues, narration provides context.
 - **title, description, style_guide, mood, target_audience, camera** MUST be in Chinese.
 - **visual_prompt** MUST be a detailed English prompt suitable for image-to-video generation (subject, action, environment, lighting, camera motion, style). When characters appear, describe them in the visual_prompt as directed by their appearance.
+- When characters are provided, include **dialogues** for character interactions — each line spoken by a character in Chinese.
 - The JSON must be parseable as-is with json.loads()."""

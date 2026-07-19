@@ -312,7 +312,7 @@ def _get_duration(video_path: Path) -> float:
 
 
 _NARRATION_SCRIPT = """#!/usr/bin/env python3
-\"\"\"Generate narration audio from scene scripts.\"\"\"
+\"\"\"Generate narration + multi-character dialogue audio from scene scripts.\"\"\"
 import json
 import sys
 from pathlib import Path
@@ -324,32 +324,59 @@ except ImportError:
     sys.exit(1)
 
 
+def _voice_for(character_name: str, char_map: dict[str, str], default: str) -> str:
+    return char_map.get(character_name, default)
+
+
 async def main():
     script_path = sys.argv[1]
     output_dir = Path(sys.argv[2])
-    voice = sys.argv[3] if len(sys.argv) > 3 else "zh-CN-XiaoxiaoNeural"
-    data = json.loads(Path(script_path).read_text())
+    default_voice = sys.argv[3] if len(sys.argv) > 3 else "zh-CN-XiaoxiaoNeural"
+    # Optional 4th argument: JSON mapping of character_name -> voice
+    char_voice_json = sys.argv[4] if len(sys.argv) > 4 else "{}"
+    char_voice: dict[str, str] = json.loads(char_voice_json)
     
+    data = json.loads(Path(script_path).read_text())
     audio_clips = []
+    clip_index = 0
+    
     for scene in data.get("scenes", []):
-        narration = scene.get("narration", "")
-        if not narration:
-            continue
         sid = scene.get("id", 0)
-        out_path = output_dir / f"narration_{sid:03d}.mp3"
         
-        communicate = edge_tts.Communicate(narration, voice)
-        await communicate.save(str(out_path))
-        audio_clips.append({
-            "id": sid,
-            "path": str(out_path),
-            "duration": scene.get("duration_seconds", 5.0),
-        })
+        # 1. Narration (default voice)
+        narration = scene.get("narration", "")
+        if narration:
+            out_path = output_dir / f"audio_{clip_index:04d}.mp3"
+            communicate = edge_tts.Communicate(narration, default_voice)
+            await communicate.save(str(out_path))
+            audio_clips.append({
+                "id": sid, "type": "narration", "character": "",
+                "path": str(out_path),
+                "duration": scene.get("duration_seconds", 5.0),
+            })
+            clip_index += 1
+        
+        # 2. Character dialogues (per-character voice)
+        for dial in scene.get("dialogues", []):
+            char_name = dial.get("character", "")
+            line = dial.get("line", "")
+            if not line:
+                continue
+            out_path = output_dir / f"audio_{clip_index:04d}.mp3"
+            voice = _voice_for(char_name, char_voice, default_voice)
+            communicate = edge_tts.Communicate(line, voice)
+            await communicate.save(str(out_path))
+            audio_clips.append({
+                "id": sid, "type": "dialogue", "character": char_name,
+                "path": str(out_path),
+                "duration": 2.5,  # approximate per dialogue line
+            })
+            clip_index += 1
     
     # Save audio manifest
     manifest = output_dir / "audio_manifest.json"
     manifest.write_text(json.dumps(audio_clips, indent=2))
-    print(f"Generated {len(audio_clips)} narration clips")
+    print(f"Generated {len(audio_clips)} audio clips ({clip_index} total)")
 
 
 if __name__ == "__main__":
@@ -395,11 +422,21 @@ def _add_narration(
     audio_dir = temp_dir / "audio"
     audio_dir.mkdir(parents=True, exist_ok=True)
 
+    if script.characters:
+        char_voices = {c.name: c.voice or cfg.tts_voice for c in script.characters}
+    else:
+        char_voices = {}
+    char_voices_json = json.dumps(char_voices, ensure_ascii=False)
+
     if verbose:
-        print(f"  Generating narration audio (edge-tts, voice: {cfg.tts_voice})...", file=sys.stderr)
+        voices_str = ", ".join(f"{k}={v}" for k, v in char_voices.items())
+        print(
+            f"  Generating narration audio (edge-tts, voice: {cfg.tts_voice}, chars: {voices_str or 'none'})...",
+            file=sys.stderr,
+        )
 
     result = subprocess.run(
-        [sys.executable, str(nar_script), str(script_json), str(audio_dir), cfg.tts_voice],
+        [sys.executable, str(nar_script), str(script_json), str(audio_dir), cfg.tts_voice, char_voices_json],
         capture_output=True,
         text=True,
     )
@@ -437,17 +474,18 @@ def _add_narration(
         str(output),
     ]
 
-    # Actually, concat won't work for audio files. Let's use a simpler approach:
-    # Concatenate all narration MP3s then overlay
-    audio_files = sorted(audio_dir.glob("narration_*.mp3"))
-    if not audio_files:
+    # Concatenate all audio clips in manifest order (narration + dialogue interleaved)
+    manifest_data = json.loads(audio_manifest.read_text())
+    if not manifest_data:
+        if verbose:
+            print("  ⚠ No audio clips in manifest, skipping narration", file=sys.stderr)
         return video_path
 
-    # Concatenate all narration files
-    concat_audio = temp_dir / "narration_concat.mp3"
-    concat_list = temp_dir / "narration_list.txt"
+    audio_files = [m["path"] for m in manifest_data]
+    concat_audio = temp_dir / "audio_concat.mp3"
+    concat_list = temp_dir / "audio_list.txt"
     concat_list.write_text(
-        "\n".join(f"file '{f.resolve()}'" for f in audio_files)
+        "\n".join(f"file '{f}'" for f in audio_files)
     )
 
     subprocess.run(
