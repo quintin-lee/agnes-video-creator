@@ -111,34 +111,58 @@ def cmd_create(args: argparse.Namespace) -> None:
     cfg = _build_cfg(args)
     _require_key(cfg)
 
-    # ── Step 1: Script generation ──
-    if not args.quiet:
-        print("\n=== Step 1/4: Generating script ===", file=sys.stderr)
+    # ── Resume or start fresh ──
+    script = None
+    needs_script, needs_images, needs_videos = True, True, True
 
-    script = generate_script(
-        args.topic,
-        cfg=cfg,
-        style_hint=args.style or "",
-        target_duration=args.duration,
-        verbose=not args.quiet,
-    )
+    if args.resume:
+        script, needs_script, needs_images, needs_videos = _resume_from_script(
+            cfg, verbose=not args.quiet
+        )
+
+    step = 0
+    total_steps = 4 - int(args.skip_images or (script and not needs_images)) \
+                     - int(args.skip_video or (script and not needs_videos)) \
+                     - int(args.skip_assembly)
+
+    # ── Step 1: Script generation ──
+    step += 1
+    if needs_script:
+        if not args.quiet:
+            print(f"\n=== Step {step}/{total_steps}: Generating script ===", file=sys.stderr)
+        script = generate_script(
+            args.topic,
+            cfg=cfg,
+            style_hint=args.style or "",
+            target_duration=args.duration,
+            verbose=not args.quiet,
+        )
+    else:
+        if not args.quiet:
+            print(f"\n  ✓ Script loaded from disk, skipping.", file=sys.stderr)
 
     script_path = _script_path(cfg)
     script.save(script_path)
-    if not args.quiet:
+    if not args.quiet and needs_script:
         print(f"  Script: {script_path}", file=sys.stderr)
 
     # ── Step 2: Scene images ──
-    if not args.skip_images:
+    do_images = not args.skip_images and needs_images
+    if do_images:
+        step += 1
         if not args.quiet:
-            print("\n=== Step 2/4: Generating scene images ===", file=sys.stderr)
+            print(f"\n=== Step {step}/{total_steps}: Generating scene images ===", file=sys.stderr)
         script = generate_scene_images(script, cfg=cfg, verbose=not args.quiet)
         script.save(script_path)
+    elif args.resume and not needs_images and not args.quiet:
+        print(f"\n  ✓ All scenes already have images, skipping.", file=sys.stderr)
 
     # ── Step 3: Video clips ──
-    if not args.skip_video:
+    do_videos = not args.skip_video and needs_videos
+    if do_videos:
+        step += 1
         if not args.quiet:
-            print("\n=== Step 3/4: Generating video clips ===", file=sys.stderr)
+            print(f"\n=== Step {step}/{total_steps}: Generating video clips ===", file=sys.stderr)
         script = generate_video_clips(
             script,
             cfg=cfg,
@@ -147,11 +171,14 @@ def cmd_create(args: argparse.Namespace) -> None:
             verbose=not args.quiet,
         )
         script.save(script_path)
+    elif args.resume and not needs_videos and not args.quiet:
+        print(f"\n  ✓ All scenes already have videos, skipping.", file=sys.stderr)
 
     # ── Step 4: Assembly ──
     if not args.skip_assembly:
+        step += 1
         if not args.quiet:
-            print("\n=== Step 4/4: Assembling final video ===", file=sys.stderr)
+            print(f"\n=== Step {step}/{total_steps}: Assembling final video ===", file=sys.stderr)
         output_path = assemble_video(
             script,
             cfg=cfg,
@@ -167,47 +194,73 @@ def cmd_ref_create(args: argparse.Namespace) -> None:
     cfg = _build_cfg(args)
     _require_key(cfg)
 
-    # Override ref config from CLI
     cfg.ref_num_frames = args.ref_frames
 
-    # ── Step 0: Analyze reference video ──
-    if not args.quiet:
-        print("\n=== Step 0/5: Analyzing reference video ===", file=sys.stderr)
+    # ── Resume or start fresh ──
+    script = None
+    needs_script, needs_images, needs_videos = True, True, True
 
-    profile = analyze_reference_video(
-        args.reference,
-        cfg,
-        num_frames=args.ref_frames,
-        verbose=not args.quiet,
-    )
+    if args.resume:
+        script, needs_script, needs_images, needs_videos = _resume_from_script(
+            cfg, verbose=not args.quiet
+        )
+
+    total_steps = (5 if needs_script else 4) \
+                     - int(args.skip_images or (script and not needs_images)) \
+                     - int(args.skip_video or (script and not needs_videos)) \
+                     - int(args.skip_assembly)
+
+    step = 0
+
+    # ── Step 0: Analyze reference video ──
+    if needs_script:
+        step += 1
+        if not args.quiet:
+            print(f"\n=== Step {step}/{total_steps}: Analyzing reference video ===", file=sys.stderr)
+        profile = analyze_reference_video(
+            args.reference,
+            cfg,
+            num_frames=args.ref_frames,
+            verbose=not args.quiet,
+        )
 
     # ── Step 1: Script generation with reference style ──
-    if not args.quiet:
-        print("\n=== Step 1/5: Generating style-matched script ===", file=sys.stderr)
+    if needs_script:
+        step += 1
+        if not args.quiet:
+            print(f"\n=== Step {step}/{total_steps}: Generating style-matched script ===", file=sys.stderr)
+        script = generate_reference_script(
+            args.topic,
+            profile,
+            cfg=cfg,
+            target_duration=args.duration,
+            verbose=not args.quiet,
+        )
+    elif not args.quiet:
+        print(f"\n  ✓ Script loaded from disk, skipping.", file=sys.stderr)
 
-    script = generate_reference_script(
-        args.topic,
-        profile,
-        cfg=cfg,
-        target_duration=args.duration,
-        verbose=not args.quiet,
-    )
     script_path = _script_path(cfg)
     script.save(script_path)
-    if not args.quiet:
+    if not args.quiet and needs_script:
         print(f"  Script: {script_path}", file=sys.stderr)
 
     # ── Step 2: Scene images ──
-    if not args.skip_images:
+    do_images = not args.skip_images and needs_images
+    if do_images:
+        step += 1
         if not args.quiet:
-            print("\n=== Step 2/5: Generating scene images ===", file=sys.stderr)
+            print(f"\n=== Step {step}/{total_steps}: Generating scene images ===", file=sys.stderr)
         script = generate_scene_images(script, cfg=cfg, verbose=not args.quiet)
         script.save(script_path)
+    elif args.resume and not needs_images and not args.quiet:
+        print(f"\n  ✓ All scenes already have images, skipping.", file=sys.stderr)
 
     # ── Step 3: Video clips ──
-    if not args.skip_video:
+    do_videos = not args.skip_video and needs_videos
+    if do_videos:
+        step += 1
         if not args.quiet:
-            print("\n=== Step 3/5: Generating video clips ===", file=sys.stderr)
+            print(f"\n=== Step {step}/{total_steps}: Generating video clips ===", file=sys.stderr)
         script = generate_video_clips(
             script,
             cfg=cfg,
@@ -216,11 +269,14 @@ def cmd_ref_create(args: argparse.Namespace) -> None:
             verbose=not args.quiet,
         )
         script.save(script_path)
+    elif args.resume and not needs_videos and not args.quiet:
+        print(f"\n  ✓ All scenes already have videos, skipping.", file=sys.stderr)
 
     # ── Step 4: Assembly ──
     if not args.skip_assembly:
+        step += 1
         if not args.quiet:
-            print("\n=== Step 4/5: Assembling final video ===", file=sys.stderr)
+            print(f"\n=== Step {step}/{total_steps}: Assembling final video ===", file=sys.stderr)
         output_path = assemble_video(
             script,
             cfg=cfg,
@@ -305,6 +361,8 @@ def build_parser() -> argparse.ArgumentParser:
                         help="Video generation mode (default: image-to-video)")
     create.add_argument("--output", "-o", help="Output video filename")
     create.add_argument("--no-poll", action="store_true", help="Don't poll for video completion")
+    create.add_argument("--resume", "-r", action="store_true",
+                        help="Resume from existing output directory, skipping completed steps")
     create.add_argument("--skip-images", action="store_true", help="Skip image generation step")
     create.add_argument("--skip-video", action="store_true", help="Skip video generation step")
     create.add_argument("--skip-assembly", action="store_true", help="Skip video assembly step")
@@ -326,6 +384,8 @@ def build_parser() -> argparse.ArgumentParser:
                      help="Video generation mode (default: image-to-video)")
     ref.add_argument("--output", "-o", help="Output video filename")
     ref.add_argument("--no-poll", action="store_true", help="Don't poll for video completion")
+    ref.add_argument("--resume", "-r", action="store_true",
+                     help="Resume from existing output directory, skipping completed steps")
     ref.add_argument("--skip-images", action="store_true", help="Skip image generation step")
     ref.add_argument("--skip-video", action="store_true", help="Skip video generation step")
     ref.add_argument("--skip-assembly", action="store_true", help="Skip video assembly step")
@@ -340,6 +400,34 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 # ── Helpers ───────────────────────────────────────────────────────────
+
+
+def _resume_from_script(
+    cfg: AgnesConfig, *, verbose: bool
+) -> tuple[Script | None, bool, bool, bool]:
+    """Try to resume from an existing script in the output directory.
+
+    Returns (script, needs_script, needs_images, needs_videos).
+    All needs_* are True when starting fresh.
+    """
+    script_path = Path(_script_path(cfg))
+    if not script_path.exists():
+        return None, True, True, True
+
+    script = Script.load(script_path)
+    if not script.scenes:
+        if verbose:
+            print("  Found script but no scenes — re-generating.", file=sys.stderr)
+        return None, True, True, True
+
+    ready_images = sum(1 for s in script.scenes if s.is_image_ready)
+    ready_videos = sum(1 for s in script.scenes if s.is_video_ready)
+    total = len(script.scenes)
+    if verbose:
+        print(f"  Resuming from: {script_path}", file=sys.stderr)
+        print(f"    Scenes: {total} total, {ready_images}/{total} images, {ready_videos}/{total} videos", file=sys.stderr)
+
+    return script, False, ready_images < total, ready_videos < total
 
 
 def _build_cfg(args: argparse.Namespace) -> AgnesConfig:
