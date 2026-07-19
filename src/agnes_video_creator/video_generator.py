@@ -276,16 +276,32 @@ def _render_keyframes(
 
 
 def _extract_video_url(data: dict[str, Any]) -> str | None:
-    """Extract the first video URL from an Agnes Video response."""
+    """Extract the first video URL from an Agnes Video response.
+
+    Checks, in order:
+      1. Top-level keys: url, video_url, downloads
+      2. Nested in metadata.url (common Agnes API pattern)
+      3. List items in data["downloads"] or data["data"]
+    """
     for key in ("url", "video_url", "remixed_from_video_id"):
         value = data.get(key)
         if isinstance(value, str) and value.startswith(("http://", "https://")):
             return value
-    # Nested in data array
-    if isinstance(data.get("data"), list):
-        for item in data["data"]:
-            if isinstance(item, dict):
-                url = item.get("url")
-                if isinstance(url, str) and url.startswith(("http://", "https://")):
-                    return url
+
+    # Nested in metadata.url
+    metadata = data.get("metadata")
+    if isinstance(metadata, dict):
+        url = metadata.get("url")
+        if isinstance(url, str) and url.startswith(("http://", "https://")):
+            return url
+
+    # Nested in data / downloads array
+    for arr_key in ("data", "downloads", "videos"):
+        items = data.get(arr_key)
+        if isinstance(items, list):
+            for item in items:
+                if isinstance(item, dict):
+                    url = item.get("url")
+                    if isinstance(url, str) and url.startswith(("http://", "https://")):
+                        return url
     return None
