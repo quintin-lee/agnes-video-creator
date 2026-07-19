@@ -1,0 +1,18 @@
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "agnes-video-creator"
+version = "0.1.0"
+description = "Automatic short-video generation CLI powered by Agnes AI APIs"
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "MIT"}
+keywords = ["agnes", "video-generation", "ai", "cli"]
+
+[project.scripts]
+agnes-video = "agnes_video_creator.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
