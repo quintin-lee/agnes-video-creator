@@ -111,6 +111,14 @@ def assemble_video(
             final_path, script, temp_dir, cfg, verbose
         )
 
+    # ── Step 3.5: Add background music if configured ────────────
+    if cfg.bgm_path:
+        bgm = Path(cfg.bgm_path)
+        if bgm.exists():
+            final_path = _add_bgm(final_path, temp_dir, cfg, verbose)
+        elif verbose:
+            print(f"  ⚠ BGM file not found: {bgm}", file=sys.stderr)
+
     # ── Step 4: Copy to final output ────────────────────────────
     if not output_name:
         safe = "".join(c if c.isalnum() or c in ("-", "_") else "_" for c in script.title)
@@ -668,6 +676,60 @@ def _burn_subtitles(
     ]
 
     _run_ffmpeg(cmd, "burn subtitles", verbose)
+
+    if output.exists():
+        return output
+    return video_path
+
+
+# ── Background music ────────────────────────────────────────────────────
+
+
+def _add_bgm(
+    video_path: Path,
+    temp_dir: Path,
+    cfg: AgnesConfig,
+    verbose: bool,
+) -> Path:
+    """Layer background music beneath the video's existing audio track.
+
+    The BGM file is looped if shorter than the video, faded in/out,
+    and mixed at `cfg.bgm_volume` (default 0.08 ≈ -22 dB relative to
+    the original audio).
+    """
+    bgm_path = Path(cfg.bgm_path)
+    if not bgm_path.exists():
+        return video_path
+
+    dur = _get_duration(video_path)
+    if dur <= 0:
+        dur = 30.0
+
+    output = temp_dir / "with_bgm.mp4"
+
+    # ffmpeg: loop BGM, trim to video duration, fade in/out, volume adjust, mix
+    cmd = [
+        "ffmpeg", "-y",
+        "-i", str(video_path),
+        "-stream_loop", "-1",
+        "-i", str(bgm_path.resolve()),
+        "-filter_complex",
+        f"[1:a]"
+        f"volume={cfg.bgm_volume},"
+        f"atrim=duration={dur},"
+        f"afade=t=in:d={cfg.bgm_fade_in},"
+        f"afade=t=out:st={dur - cfg.bgm_fade_out}:d={cfg.bgm_fade_out}"
+        f"[bgm];"
+        f"[0:a][bgm]amix=inputs=2:duration=first:dropout_transition=2",
+        "-c:v", "copy",
+        "-c:a", "aac",
+        "-b:a", "128k",
+        "-movflags", "+faststart",
+        "-shortest",
+        str(output),
+    ]
+
+    _run_ffmpeg(cmd, "add background music", verbose)
 
     if output.exists():
         return output

@@ -6,6 +6,7 @@ generated assets (images / videos), and the final assembled episodes.
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import sys
 from dataclasses import asdict, dataclass, field
@@ -177,6 +178,7 @@ class Project:
         return AgnesConfig(
             add_audio=self.add_audio,
             add_subtitles=self.add_subtitles,
+            bgm_path=os.environ.get("AGNES_BGM_PATH", ""),
         )
 
     # ── Episode helpers ─────────────────────────────────────────────

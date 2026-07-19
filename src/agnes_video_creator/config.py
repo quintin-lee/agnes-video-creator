@@ -54,6 +54,10 @@ class AgnesConfig:
     add_subtitles: bool = True
     audio_lang: str = "zh"
     tts_voice: str = "zh-CN-XiaoxiaoNeural"
+    bgm_path: str = ""  # path to background music file (empty = no BGM)
+    bgm_volume: float = 0.08  # BGM gain relative to narration (0.08 ≈ -22dB)
+    bgm_fade_in: float = 2.0  # fade-in duration for BGM (seconds)
+    bgm_fade_out: float = 3.0  # fade-out duration for BGM (seconds)
 
     # ── Reference video analysis ──────────────────────────────────────
     ref_num_frames: int = 3  # frames to extract for style analysis
@@ -102,6 +106,7 @@ class AgnesConfig:
             translate_prompts=os.environ.get("AGNES_TRANSLATE", "1") != "0",
             add_audio=os.environ.get("AGNES_AUDIO", "1") != "0",
             add_subtitles=os.environ.get("AGNES_SUBTITLES", "1") != "0",
+            bgm_path=os.environ.get("AGNES_BGM_PATH", ""),
             audio_lang=os.environ.get("AGNES_AUDIO_LANG", "zh"),
             tts_voice=os.environ.get("AGNES_TTS_VOICE", "zh-CN-XiaoxiaoNeural"),
         )
