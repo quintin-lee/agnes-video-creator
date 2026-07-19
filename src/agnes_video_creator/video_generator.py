@@ -93,6 +93,14 @@ def _render_scenes(
         )
         final_prompt, orig = prepare_prompt(enriched, cfg)
 
+        # Use per-character seed for face consistency
+        scene_seed = cfg.video_seed
+        if not scene_seed and scene.character_appearances and script.characters:
+            for ch in script.characters:
+                if ch.name in scene.character_appearances and ch.seed:
+                    scene_seed = ch.seed + scene.id
+                    break
+
         payload: dict[str, Any] = {
             "model": cfg.video_model,
             "prompt": final_prompt,
@@ -103,8 +111,8 @@ def _render_scenes(
         }
         if cfg.video_num_inference_steps is not None:
             payload["num_inference_steps"] = cfg.video_num_inference_steps
-        if cfg.video_seed is not None:
-            payload["seed"] = cfg.video_seed
+        if scene_seed is not None:
+            payload["seed"] = scene_seed
         if cfg.video_negative_prompt:
             payload["negative_prompt"] = cfg.video_negative_prompt
 

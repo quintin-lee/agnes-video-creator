@@ -1,4 +1,7 @@
-"""Image generation — uses Agnes Image 2.1 Flash to create keyframe images per scene."""
+"""Image generation — uses Agnes Image 2.1 Flash to create keyframe images per scene.
+
+Also triggers character portrait generation if characters are defined.
+"""
 
 from __future__ import annotations
 
@@ -7,6 +10,7 @@ from typing import Any
 
 from agnes_video_creator.config import AgnesConfig
 from agnes_video_creator.models import Script
+from agnes_video_creator.portraits import generate_character_portraits
 from agnes_video_creator.utils import (
     download_file,
     prepare_prompt,
@@ -35,6 +39,11 @@ def generate_scene_images(
     images_dir = cfg.resolved_output / "images"
     images_dir.mkdir(parents=True, exist_ok=True)
 
+    # Generate character portraits first (ensures consistent faces)
+    if script.characters:
+        generate_character_portraits(script, cfg=cfg, verbose=verbose)
+        script.save(str(cfg.resolved_output / "script.json"))
+
     for i, scene in enumerate(script.scenes):
         if scene.is_image_ready:
             if verbose:
@@ -59,12 +68,22 @@ def generate_scene_images(
         if orig and verbose:
             print(f"    (translated from: {orig[:80]}...)", file=sys.stderr)
 
+        # Pick a seed from the first appearing character, else global or random
+        scene_seed = cfg.video_seed
+        if not scene_seed and scene.character_appearances and script.characters:
+            for ch in script.characters:
+                if ch.name in scene.character_appearances and ch.seed:
+                    scene_seed = ch.seed + scene.id
+                    break
+
         # Call Agnes Image API
         payload: dict[str, Any] = {
             "model": cfg.image_model,
             "prompt": final_prompt,
             "size": cfg.image_size,
         }
+        if scene_seed:
+            payload["seed"] = scene_seed
         # Add ratio if we have one
         if hasattr(cfg, "image_ratio") and cfg.image_ratio:
             payload["ratio"] = cfg.image_ratio
