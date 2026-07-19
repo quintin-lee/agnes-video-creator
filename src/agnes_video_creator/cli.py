@@ -25,6 +25,7 @@ from agnes_video_creator.config import AgnesConfig
 from agnes_video_creator.image_generator import generate_scene_images
 from agnes_video_creator.models import Script
 from agnes_video_creator.novel import novel_to_episodes
+from agnes_video_creator.project import Project, find_project
 from agnes_video_creator.reference import analyze_reference_video, generate_reference_script
 from agnes_video_creator.script_generator import generate_script
 from agnes_video_creator.utils import json_pretty
@@ -349,6 +350,90 @@ def cmd_status(args: argparse.Namespace) -> None:
         )
 
 
+# ── Project commands ──────────────────────────────────────────────────
+
+
+def cmd_project_init(args: argparse.Namespace) -> None:
+    """Create a new project from a novel file."""
+    cfg = _build_cfg(args)
+    _require_key(cfg)
+
+    project = Project.init(
+        args.name,
+        novel_path=args.novel,
+        style_guide=args.style or "",
+        mood=args.mood or "",
+        target_audience=args.target or "",
+        add_audio=not args.no_audio,
+        add_subtitles=not args.no_subtitles,
+        video_mode=args.mode,
+    )
+    print(f"Project created: {project.root}/", file=sys.stderr)
+    if args.novel:
+        print(f"  Novel: {args.novel}", file=sys.stderr)
+    print(f"\nNext: agnes-video project analyze", file=sys.stderr)
+
+
+def cmd_project_analyze(args: argparse.Namespace) -> None:
+    """Analyze novel and create episode scripts."""
+    cfg = _build_cfg(args)
+    _require_key(cfg)
+
+    proj_path = find_project()
+    if not proj_path:
+        raise SystemExit("No project.json found in current or parent directories.")
+    project = Project.load(proj_path)
+
+    if not project.novel_path:
+        raise SystemExit("No novel.txt in project — did you run 'project init' with a novel?")
+    if not Path(project.novel_path).exists():
+        raise SystemExit(f"Novel file not found: {project.novel_path}")
+
+    project.analyze_novel(max_episodes=args.episodes, verbose=not args.quiet)
+    print(f"\n✓ Analysis complete.", file=sys.stderr)
+    print(f"Next: agnes-video project status", file=sys.stderr)
+
+
+def cmd_project_render(args: argparse.Namespace) -> None:
+    """Render one or all episodes."""
+    cfg = _build_cfg(args)
+    _require_key(cfg)
+
+    proj_path = find_project()
+    if not proj_path:
+        raise SystemExit("No project.json found in current or parent directories.")
+    project = Project.load(proj_path)
+
+    if args.episode:
+        project.render_episode(
+            args.episode,
+            skip_images=args.skip_images,
+            skip_video=args.skip_video,
+            skip_assembly=args.skip_assembly,
+            no_poll=args.no_poll,
+            verbose=not args.quiet,
+        )
+    else:
+        project.render_all(
+            skip_images=args.skip_images,
+            skip_video=args.skip_video,
+            skip_assembly=args.skip_assembly,
+            no_poll=args.no_poll,
+            verbose=not args.quiet,
+        )
+
+    print(f"\n{project.status_report()}", file=sys.stderr)
+
+
+def cmd_project_status(args: argparse.Namespace) -> None:
+    """Show project status."""
+    proj_path = find_project()
+    if not proj_path:
+        raise SystemExit("No project.json found in current or parent directories.")
+    project = Project.load(proj_path)
+    print(project.status_report())
+
+
 # ── Argument parsing ──────────────────────────────────────────────────
 
 
@@ -445,6 +530,40 @@ def build_parser() -> argparse.ArgumentParser:
     novel.add_argument("--episode", type=int, default=0,
                        help="Generate only this specific episode number (default: all)")
     novel.set_defaults(func=cmd_novel)
+
+    # ── project ────────────────────────────────────────────────────
+    project = sub.add_parser("project", help="Multi-episode project management")
+    project_sub = project.add_subparsers(dest="project_command", required=True)
+
+    p_init = project_sub.add_parser("init", help="Create a new project from a novel")
+    p_init.add_argument("name", help="Project name (also the output directory name)")
+    p_init.add_argument("novel", nargs="?", default="", help="Path to novel text file (.txt)")
+    p_init.add_argument("--style", help="Visual style guide")
+    p_init.add_argument("--mood", help="Overall mood/tone")
+    p_init.add_argument("--target", help="Target audience")
+    p_init.add_argument("--no-audio", action="store_true", help="Disable TTS narration")
+    p_init.add_argument("--no-subtitles", action="store_true", help="Disable subtitles")
+    p_init.add_argument("--mode", default="image-to-video",
+                        choices=("text-to-video", "image-to-video", "keyframes"),
+                        help="Video mode (default: image-to-video)")
+    p_init.set_defaults(func=cmd_project_init)
+
+    p_status = project_sub.add_parser("status", help="Show project status")
+    p_status.set_defaults(func=cmd_project_status)
+
+    p_render = project_sub.add_parser("render", help="Render one or all episodes")
+    p_render.add_argument("--episode", type=int, default=0,
+                          help="Episode number to render (default: all pending)")
+    p_render.add_argument("--no-poll", action="store_true", help="Don't poll for video completion")
+    p_render.add_argument("--skip-images", action="store_true", help="Skip image generation")
+    p_render.add_argument("--skip-video", action="store_true", help="Skip video generation")
+    p_render.add_argument("--skip-assembly", action="store_true", help="Skip assembly")
+    p_render.set_defaults(func=cmd_project_render)
+
+    p_analyze = project_sub.add_parser("analyze", help="Analyze novel and create episode scripts")
+    p_analyze.add_argument("--episodes", type=int, default=12,
+                           help="Max episodes to generate (default: 12)")
+    p_analyze.set_defaults(func=cmd_project_analyze)
 
     return parser
 
