@@ -30,6 +30,7 @@ from agnes_video_creator.reference import analyze_reference_video, generate_refe
 from agnes_video_creator.script_generator import generate_script
 from agnes_video_creator.utils import json_pretty
 from agnes_video_creator.video_generator import generate_video_clips
+from agnes_video_creator.web_ui import run_server as _run_web_server
 
 
 # ── Command implementations ───────────────────────────────────────────
@@ -123,9 +124,9 @@ def cmd_create(args: argparse.Namespace) -> None:
         )
 
     step = 0
-    total_steps = 4 - int(args.skip_images or (script and not needs_images)) \
-                     - int(args.skip_video or (script and not needs_videos)) \
-                     - int(args.skip_assembly)
+    total_steps = 4 - int(args.skip_images or (script is not None and not needs_images)) \
+                    - int(args.skip_video or (script is not None and not needs_videos)) \
+                    - int(args.skip_assembly)
 
     # ── Step 1: Script generation ──
     step += 1
@@ -211,8 +212,8 @@ def cmd_ref_create(args: argparse.Namespace) -> None:
         )
 
     total_steps = (5 if needs_script else 4) \
-                     - int(args.skip_images or (script and not needs_images)) \
-                     - int(args.skip_video or (script and not needs_videos)) \
+                     - int(args.skip_images or (script is not None and not needs_images)) \
+                     - int(args.skip_video or (script is not None and not needs_videos)) \
                      - int(args.skip_assembly)
 
     step = 0
@@ -441,6 +442,11 @@ def cmd_project_render(args: argparse.Namespace) -> None:
     print(f"\n{project.status_report()}", file=sys.stderr)
 
 
+def cmd_web(args: argparse.Namespace) -> None:
+    """Launch the web UI dashboard."""
+    _run_web_server(host=args.host, port=args.port)
+
+
 def cmd_project_status(args: argparse.Namespace) -> None:
     """Show project status."""
     proj_path = find_project()
@@ -594,6 +600,12 @@ def build_parser() -> argparse.ArgumentParser:
     p_analyze.add_argument("--episodes", type=int, default=12,
                            help="Max episodes to generate (default: 12)")
     p_analyze.set_defaults(func=cmd_project_analyze)
+
+    # ── web ─────────────────────────────────────────────────────────
+    web = sub.add_parser("web", help="Launch web UI dashboard")
+    web.add_argument("--host", default="127.0.0.1", help="Host to bind (default: 127.0.0.1)")
+    web.add_argument("--port", type=int, default=8765, help="Port to bind (default: 8765)")
+    web.set_defaults(func=cmd_web)
 
     return parser
 

@@ -10,6 +10,9 @@ readme = "README.md"
 requires-python = ">=3.10"
 license = {text = "MIT"}
 keywords = ["agnes", "video-generation", "ai", "cli"]
+dependencies = []
+[project.optional-dependencies]
+web = ["fastapi", "uvicorn"]
 
 [project.scripts]
 agnes-video = "agnes_video_creator.cli:main"
