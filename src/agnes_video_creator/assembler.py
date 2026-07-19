@@ -94,8 +94,7 @@ def assemble_video(
     # ── Step 2: Generate concat file ────────────────────────────
     concat_file = temp_dir / "concat_list.txt"
 
-    if cfg.transition == "fade" and len(normalised) > 1:
-        # Use complex filter for crossfade
+    if cfg.transition != "none" and len(normalised) > 1:
         final_path = _assemble_with_fades(
             normalised, concat_file, temp_dir, cfg, verbose
         )
@@ -110,6 +109,42 @@ def assemble_video(
         final_path = _add_narration(
             final_path, script, temp_dir, cfg, verbose
         )
+
+    # ── Step 3a: Prepend title card if requested ────────────────
+    if cfg.title_card and script.title:
+        title_path = _create_title_card(script.title, script.description or "", temp_dir, cfg, verbose)
+        if title_path:
+            concat_list = temp_dir / "title_concat.txt"
+            concat_list.write_text(
+                f"file '{title_path.resolve()}'\n"
+                f"file '{final_path.resolve()}'\n"
+            )
+            concat_output = temp_dir / "with_title.mp4"
+            subprocess.run(
+                ["ffmpeg", "-y", "-f", "concat", "-safe", "0",
+                 "-i", str(concat_list), "-c", "copy", str(concat_output)],
+                capture_output=True, check=False,
+            )
+            if concat_output.exists():
+                final_path = concat_output
+
+    # ── Step 3b: Append end credits if requested ────────────────
+    if cfg.end_credits:
+        credits_path = _create_end_credits(script, temp_dir, cfg, verbose)
+        if credits_path:
+            concat_list = temp_dir / "credits_concat.txt"
+            concat_list.write_text(
+                f"file '{final_path.resolve()}'\n"
+                f"file '{credits_path.resolve()}'\n"
+            )
+            concat_output = temp_dir / "with_credits.mp4"
+            subprocess.run(
+                ["ffmpeg", "-y", "-f", "concat", "-safe", "0",
+                 "-i", str(concat_list), "-c", "copy", str(concat_output)],
+                capture_output=True, check=False,
+            )
+            if concat_output.exists():
+                final_path = concat_output
 
     # ── Step 3.5: Add background music if configured ────────────
     if cfg.bgm_path:
@@ -333,9 +368,10 @@ def _assemble_with_fades(
     for i in range(1, n):
         # Calculate cumulative duration of previous clips minus transitions
         prev_dur = sum(durations[:i]) - td * i
+        xfade_type = _pick_transition(cfg.transition, i)
         filters.append(
             f"[{prev}][{i}:v]"
-            f"xfade=transition=fade:duration={td}:offset={prev_dur - td}[v{i}]"
+            f"xfade=transition={xfade_type}:duration={td}:offset={prev_dur - td}[v{i}]"
         )
         # Audio crossfade
         filters.append(
@@ -386,6 +422,39 @@ def _get_duration(video_path: Path) -> float:
     except (subprocess.CalledProcessError, ValueError):
         # Default fallback: treat as 5 seconds
         return 5.0
+
+
+_XFADE_POOL = [
+    "fade", "dissolve", "wipeleft", "wiperight", "wipeup", "wipedown",
+    "slideleft", "slideright", "slideup", "slidedown",
+    "pixelize", "fadeblack", "fadewhite", "radial",
+]
+
+# Deterministic pseudo-random picker for transition types
+_xfade_idx: int = 0
+
+
+def _pick_transition(style: str, clip_index: int) -> str:
+    """Map a friendly transition name to an ffmpeg xfade transition type.
+
+    'fade' / 'dissolve' / 'wipe' / 'slide' map directly.
+    'random' picks from the pool deterministically based on clip_index.
+    """
+    global _xfade_idx
+    if style == "fade":
+        return "fade"
+    if style == "dissolve":
+        return "dissolve"
+    if style == "wipe":
+        choices = ["wipeleft", "wiperight", "wipeup", "wipedown"]
+        return choices[clip_index % len(choices)]
+    if style == "slide":
+        choices = ["slideleft", "slideright", "slideup", "slidedown"]
+        return choices[clip_index % len(choices)]
+    if style == "random":
+        _xfade_idx += 1
+        return _XFADE_POOL[abs(hash(f"{_xfade_idx}_{clip_index}")) % len(_XFADE_POOL)]
+    return "fade"
 
 
 # ── Narration / TTS ────────────────────────────────────────────────────
@@ -680,6 +749,123 @@ def _burn_subtitles(
     if output.exists():
         return output
     return video_path
+
+
+# ── Title / credits cards ──────────────────────────────────────────────
+
+
+def _find_cjk_font() -> str:
+    """Find a system font that supports CJK characters."""
+    candidates = [
+        "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+        "/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc",
+        "/usr/share/fonts/noto-cjk/NotoSansCJK-Regular.ttc",
+        "/usr/share/fonts/opentype/noto/NotoSansSC-Regular.otf",
+        "/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc",
+        "/usr/share/fonts/wqy-zenhei/wqy-zenhei.ttc",
+        "/usr/share/fonts/truetype/droid/DroidSansFallbackFull.ttf",
+    ]
+    for p in candidates:
+        if Path(p).exists():
+            return p
+    # Last resort — use whatever font is available (might not render CJK)
+    return "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
+
+
+def _create_title_card(
+    title: str,
+    subtitle: str,
+    temp_dir: Path,
+    cfg: AgnesConfig,
+    verbose: bool,
+) -> Path | None:
+    """Generate a 4-second title card video with black background and centred text."""
+    font = _find_cjk_font()
+    escaped_title = title.replace(":", "\\:").replace("'", "\\\\'")
+    escaped_sub = subtitle.replace(":", "\\:").replace("'", "\\\\'") if subtitle else ""
+
+    output = temp_dir / "title_card.mp4"
+
+    drawtext_title = (
+        f"drawtext=text='{escaped_title}':"
+        f"fontfile={font}:"
+        f"fontsize=48:"
+        f"fontcolor=white:"
+        f"x=(w-text_w)/2:y=(h-text_h)/2-40:"
+        f"box=1:boxcolor=black@0.6:boxborderw=20"
+    )
+
+    filters = [drawtext_title]
+    if escaped_sub:
+        filters.append(
+            f"drawtext=text='{escaped_sub}':"
+            f"fontfile={font}:"
+            f"fontsize=24:"
+            f"fontcolor=gray:"
+            f"x=(w-text_w)/2:y=(h-text_h)/2+40:"
+            f"box=1:boxcolor=black@0.4:boxborderw=10"
+        )
+
+    cmd = [
+        "ffmpeg", "-y",
+        "-f", "lavfi",
+        "-i", f"color=c=black:s={cfg.video_width}x{cfg.video_height}:d=4:r={cfg.target_fps}",
+        "-vf", ",".join(filters),
+        "-c:v", "libx264",
+        "-preset", "fast",
+        "-crf", "18",
+        "-pix_fmt", "yuv420p",
+        "-c:a", "aac",
+        "-b:a", "128k",
+        str(output),
+    ]
+    _run_ffmpeg(cmd, "generate title card", verbose)
+    return output if output.exists() else None
+
+
+def _create_end_credits(
+    script: Script,
+    temp_dir: Path,
+    cfg: AgnesConfig,
+    verbose: bool,
+) -> Path | None:
+    """Generate a 4-second end-credits card."""
+    font = _find_cjk_font()
+    lines = [f"导演/编剧: {script.title}"]
+    if script.characters:
+        for ch in script.characters:
+            lines.append(f"角色 {ch.name}: {ch.role or '演员'}")
+    lines.append("Powered by Agnes AI")
+
+    # ffmpeg drawtext with multiple lines — use textfile instead
+    credits_text = "\n".join(lines)
+    textfile = temp_dir / "credits_text.txt"
+    textfile.write_text(credits_text, encoding="utf-8")
+
+    output = temp_dir / "end_credits.mp4"
+    cmd = [
+        "ffmpeg", "-y",
+        "-f", "lavfi",
+        "-i", f"color=c=black:s={cfg.video_width}x{cfg.video_height}:d=4:r={cfg.target_fps}",
+        "-vf", (
+            f"drawtext=textfile={textfile}:"
+            f"fontfile={font}:"
+            f"fontsize=28:"
+            f"fontcolor=white:"
+            f"x=(w-text_w)/2:y=(h-text_h)/2:"
+            f"line_spacing=10:"
+            f"box=1:boxcolor=black@0.5:boxborderw=15"
+        ),
+        "-c:v", "libx264",
+        "-preset", "fast",
+        "-crf", "18",
+        "-pix_fmt", "yuv420p",
+        "-c:a", "aac",
+        "-b:a", "128k",
+        str(output),
+    ]
+    _run_ffmpeg(cmd, "generate end credits", verbose)
+    return output if output.exists() else None
 
 
 # ── Background music ────────────────────────────────────────────────────

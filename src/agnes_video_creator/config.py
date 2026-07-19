@@ -47,7 +47,7 @@ class AgnesConfig:
     temp_dir: str = ""
 
     # ── Assembly ─────────────────────────────────────────────────────
-    transition: str = "fade"  # fade / dissolve / none
+    transition: str = "fade"  # fade / dissolve / wipe / slide / random / none
     transition_duration: float = 0.5  # seconds
     target_fps: int = 24
     add_audio: bool = True
@@ -58,6 +58,8 @@ class AgnesConfig:
     bgm_volume: float = 0.08  # BGM gain relative to narration (0.08 ≈ -22dB)
     bgm_fade_in: float = 2.0  # fade-in duration for BGM (seconds)
     bgm_fade_out: float = 3.0  # fade-out duration for BGM (seconds)
+    title_card: bool = True  # add opening title card
+    end_credits: bool = True  # add end credits card
 
     # ── Reference video analysis ──────────────────────────────────────
     ref_num_frames: int = 3  # frames to extract for style analysis
