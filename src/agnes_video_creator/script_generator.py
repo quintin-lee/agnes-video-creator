@@ -17,14 +17,16 @@ def generate_script(
     cfg: AgnesConfig | None = None,
     style_hint: str = "",
     target_duration: float = 15.0,
+    character_info: str = "",
     verbose: bool = True,
 ) -> Script:
     """Generate a complete video script from a topic description.
 
-    Steps:
-      1. Call Agnes 2.0 Flash with a structured system prompt.
-      2. Parse the returned JSON into a Script.
-      3. Save the script to the output directory.
+    Parameters
+    ----------
+    character_info : str
+        If non-empty, the system prompt includes character descriptions
+        and per-scene character_appearances tracking.
     """
     if cfg is None:
         cfg = AgnesConfig.from_env()
@@ -50,7 +52,7 @@ def generate_script(
     payload = {
         "model": cfg.text_model,
         "messages": [
-            {"role": "system", "content": Script.generate_system_prompt()},
+            {"role": "system", "content": Script.generate_system_prompt(character_info=character_info)},
             {"role": "user", "content": user_prompt},
         ],
         "temperature": cfg.text_temperature,
@@ -143,6 +145,7 @@ def _parse_script_json(raw: str, fallback_title: str) -> Script:
             duration_seconds=float(s.get("duration_seconds", 5)),
             camera=s.get("camera", "static"),
             style=s.get("style", "cinematic"),
+            character_appearances=s.get("character_appearances", []),
         )
         for i, s in enumerate(scenes_raw)
     ]

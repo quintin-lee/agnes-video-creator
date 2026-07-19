@@ -87,7 +87,11 @@ def _render_scenes(
                 file=sys.stderr,
             )
 
-        final_prompt, orig = prepare_prompt(scene.visual_prompt, cfg)
+        # Inject character appearances into the visual prompt
+        enriched = script.inject_characters(
+            scene.visual_prompt, scene.character_appearances
+        )
+        final_prompt, orig = prepare_prompt(enriched, cfg)
 
         payload: dict[str, Any] = {
             "model": cfg.video_model,

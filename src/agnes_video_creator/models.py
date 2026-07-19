@@ -9,6 +9,16 @@ from typing import Any
 
 
 @dataclass
+class Character:
+    """A character in the video story."""
+
+    name: str
+    appearance: str = ""  # visual description (injected into visual_prompts)
+    voice: str = ""  # edge-tts voice name, empty = use default
+    role: str = ""  # e.g. "主角", "反派", "配角"
+
+
+@dataclass
 class Scene:
     """A single scene in the video storyboard."""
 
@@ -22,6 +32,7 @@ class Scene:
     image_path: str = ""
     video_url: str = ""
     video_path: str = ""
+    character_appearances: list[str] = field(default_factory=list)
 
     @property
     def is_image_ready(self) -> bool:
@@ -51,6 +62,8 @@ class Script:
     mood: str = ""
     target_audience: str = ""
     output_dir: str = ""
+    characters: list[Character] = field(default_factory=list)
+    episode: int = 0  # episode number for novel-based workflows
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -62,6 +75,8 @@ class Script:
             "mood": self.mood,
             "target_audience": self.target_audience,
             "output_dir": self.output_dir,
+            "characters": [asdict(c) for c in self.characters],
+            "episode": self.episode,
         }
 
     def save(self, path: str | Path) -> None:
@@ -73,37 +88,71 @@ class Script:
     def load(cls, path: str | Path) -> Script:
         data = json.loads(Path(path).read_text())
         scenes = [Scene.from_dict(s) for s in data.pop("scenes", [])]
-        return cls(scenes=scenes, **data)
+        chars = [Character(**c) for c in data.pop("characters", [])]
+        return cls(scenes=scenes, characters=chars, **data)
+
+    def inject_characters(
+        self, visual_prompt: str, scene_characters: list[str]
+    ) -> str:
+        """Prepend character appearance descriptions to a visual_prompt."""
+        if not scene_characters:
+            return visual_prompt
+        char_map = {c.name: c.appearance for c in self.characters if c.appearance}
+        descs = [
+            f"{name}: {char_map[name]}"
+            for name in scene_characters
+            if name in char_map
+        ]
+        if not descs:
+            return visual_prompt
+        return f"Characters: {'; '.join(descs)}. {visual_prompt}"
 
     @staticmethod
-    def generate_system_prompt() -> str:
-        return """You are a professional short-video scriptwriter. Given a topic, produce a detailed storyboard.
+    def generate_system_prompt(
+        character_info: str = "",
+    ) -> str:
+        """Generate the system prompt for script generation.
+
+        Parameters
+        ----------
+        character_info : str
+            If non-empty, injected into the prompt so the model generates
+            character-aware scenes with character_appearances per scene.
+        """
+        char_section = ""
+        if character_info:
+            char_section = f"""
+Known characters:
+{character_info}
+
+For each scene, include a "character_appearances" field listing which characters appear."""
+        return f"""You are a professional short-video scriptwriter. Given a topic, produce a detailed storyboard.
 
 Output **only** valid JSON with this exact structure — no markdown fences, no commentary:
 
-{
+{{
   "title": "Video title (in Chinese)",
   "description": "One-sentence summary (in Chinese)",
   "total_duration": 15.0,
   "style_guide": "Visual style guide (in Chinese)",
   "mood": "Overall mood/tone (in Chinese)",
-  "target_audience": "Who this is for (in Chinese)",
+  "target_audience": "Who this is for (in Chinese)",{char_section}
   "scenes": [
-    {
+    {{
       "id": 1,
       "narration": "Voice-over text in Chinese, 1-2 sentences",
       "visual_prompt": "Detailed English image/video generation prompt: subject, action, environment, lighting, camera, style, quality",
       "duration_seconds": 5.0,
       "camera": "Camera movement (in Chinese)",
       "style": "Visual style (in Chinese)"
-    }
+    }}
   ]
-}
+}}{'' if char_section else ''}
 
 Rules:
 - Total video should be 15-60 seconds across all scenes.
 - Each scene 3-10 seconds. Shorter scenes for fast cuts, longer for establishing shots.
 - **narration** MUST be in Chinese — 1-2 sentences per scene.
 - **title, description, style_guide, mood, target_audience, camera** MUST be in Chinese.
-- **visual_prompt** MUST be a detailed English prompt suitable for image-to-video generation (subject, action, environment, lighting, camera motion, style).
+- **visual_prompt** MUST be a detailed English prompt suitable for image-to-video generation (subject, action, environment, lighting, camera motion, style). When characters appear, describe them in the visual_prompt as directed by their appearance.
 - The JSON must be parseable as-is with json.loads()."""

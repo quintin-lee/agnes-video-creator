@@ -50,8 +50,12 @@ def generate_scene_images(
                 file=sys.stderr,
             )
 
+        # Inject character appearances into the visual prompt
+        enriched = script.inject_characters(
+            scene.visual_prompt, scene.character_appearances
+        )
         # Prepare the prompt (translate non-English if needed)
-        final_prompt, orig = prepare_prompt(scene.visual_prompt, cfg)
+        final_prompt, orig = prepare_prompt(enriched, cfg)
         if orig and verbose:
             print(f"    (translated from: {orig[:80]}...)", file=sys.stderr)
 
