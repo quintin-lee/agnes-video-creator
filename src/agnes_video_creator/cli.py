@@ -139,6 +139,9 @@ def cmd_create(args: argparse.Namespace) -> None:
             target_duration=args.duration,
             verbose=not args.quiet,
         )
+        # Optional review pause
+        if not args.no_review:
+            _review_script(script)
     else:
         if not args.quiet:
             print(f"\n  ✓ Script loaded from disk, skipping.", file=sys.stderr)
@@ -489,6 +492,8 @@ def build_parser() -> argparse.ArgumentParser:
     create.add_argument("--no-poll", action="store_true", help="Don't poll for video completion")
     create.add_argument("--resume", "-r", action="store_true",
                         help="Resume from existing output directory, skipping completed steps")
+    create.add_argument("--no-review", action="store_true",
+                        help="Skip the pause-for-review step after script generation")
     create.add_argument("--skip-images", action="store_true", help="Skip image generation step")
     create.add_argument("--skip-video", action="store_true", help="Skip video generation step")
     create.add_argument("--skip-assembly", action="store_true", help="Skip video assembly step")
@@ -628,6 +633,35 @@ def _load_script(path: str) -> Script:
     if not p.exists():
         raise SystemExit(f"Script file not found: {path}")
     return Script.load(p)
+
+
+def _review_script(script: Script) -> None:
+    """Pause and prompt the user to review the generated script before continuing."""
+    print("\n" + "=" * 60, file=sys.stderr)
+    print(f"Script generated: {script.title}", file=sys.stderr)
+    print(f"  Scenes:    {len(script.scenes)}", file=sys.stderr)
+    print(f"  Duration:  {script.total_duration:.1f}s", file=sys.stderr)
+    print(f"  Style:     {script.style_guide or '(not set)'}", file=sys.stderr)
+    print(f"  Mood:      {script.mood or '(not set)'}", file=sys.stderr)
+    print(f"  Target:    {script.target_audience or '(not set)'}", file=sys.stderr)
+    if script.characters:
+        print(f"  Characters ({len(script.characters)}):")
+        for c in script.characters:
+            print(f"    - {c.name} ({c.role})", file=sys.stderr)
+    for sc in script.scenes[:5]:
+        print(f"  Scene {sc.id}: {sc.duration_seconds}s — {sc.narration[:80]}...", file=sys.stderr)
+    if len(script.scenes) > 5:
+        print(f"  ... and {len(script.scenes) - 5} more scene(s)", file=sys.stderr)
+    print("=" * 60, file=sys.stderr)
+    print("You can edit the script JSON file before continuing.", file=sys.stderr)
+    print("Continue without changes? [Y/n]: ", end="", file=sys.stderr)
+    try:
+        answer = input().strip().lower()
+        if answer in ("n", "no"):
+            print("\nEdit the script JSON file, then re-run with --resume.", file=sys.stderr)
+            raise SystemExit(0)
+    except (EOFError, KeyboardInterrupt):
+        raise SystemExit(0)
 
 
 def _video_mode(args: argparse.Namespace) -> str:
