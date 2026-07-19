@@ -9,6 +9,8 @@ import json
 import os
 import shutil
 import sys
+import threading
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -78,6 +80,9 @@ class Project:
     add_audio: bool = True
     add_subtitles: bool = True
     video_mode: str = "image-to-video"
+    parallel: bool = False  # render episodes concurrently
+    max_workers: int = 2  # max parallel threads
+    preview_storyboard: bool = True  # pause after images for review
 
     # ── Class methods ──────────────────────────────────────────────
 
@@ -94,6 +99,9 @@ class Project:
         add_audio: bool = True,
         add_subtitles: bool = True,
         video_mode: str = "image-to-video",
+        parallel: bool = False,
+        max_workers: int = 2,
+        preview_storyboard: bool = True,
     ) -> Project:
         if not root:
             root = name
@@ -113,6 +121,9 @@ class Project:
             add_audio=add_audio,
             add_subtitles=add_subtitles,
             video_mode=video_mode,
+            parallel=parallel,
+            max_workers=max_workers,
+            preview_storyboard=preview_storyboard,
         )
         if novel_path:
             src = Path(novel_path).resolve()
@@ -144,6 +155,9 @@ class Project:
             "add_audio": self.add_audio,
             "add_subtitles": self.add_subtitles,
             "video_mode": self.video_mode,
+            "parallel": self.parallel,
+            "max_workers": self.max_workers,
+            "preview_storyboard": self.preview_storyboard,
             "episodes": [
                 {
                     "number": e.number,
@@ -273,8 +287,13 @@ class Project:
         skip_assembly: bool = False,
         no_poll: bool = False,
         verbose: bool = True,
+        _lock: threading.Lock | None = None,
     ) -> None:
-        """Run the full pipeline (or resume) for a single episode."""
+        """Run the full pipeline (or resume) for a single episode.
+
+        _lock is an optional threading.Lock for synchronising stderr
+        output when called from parallel workers.
+        """
         ep = self.ensure_episode(num)
         sp = Path(ep.script_path)
         if not sp.exists():
@@ -286,16 +305,33 @@ class Project:
         cfg = self._build_cfg()
         script.output_dir = str(self.root_path)
 
+        def _log(msg: str) -> None:
+            if not verbose:
+                return
+            if _lock:
+                _lock.acquire()
+            try:
+                print(msg, file=sys.stderr)
+            finally:
+                if _lock:
+                    _lock.release()
+
         # ── Images ──
         if not skip_images and ep.status in ("script_ready", "pending", "images_ready"):
             do_images = not all(s.is_image_ready for s in script.scenes)
             if do_images:
-                if verbose:
-                    print(f"\n  [{num}] Generating images ({len(script.scenes)} scenes)...", file=sys.stderr)
+                _log(f"\n  [{num}] Generating images ({len(script.scenes)} scenes)...")
                 script = generate_scene_images(script, cfg=cfg, verbose=verbose)
                 ep.advance()
             else:
                 ep.advance()
+
+            if self.preview_storyboard:
+                ep_dir = self._ep_dir(num)
+                storyboard_html = ep_dir / "storyboard.html"
+                from agnes_video_creator.storyboard import generate_storyboard_html, preview_storyboard  # noqa: PLC0415
+                generate_storyboard_html(script, storyboard_html)
+                _log(f"\n  [{num}] 📋 Storyboard: {storyboard_html}")
         elif ep.status == "images_ready":
             pass
         else:
@@ -359,13 +395,70 @@ class Project:
         skip_assembly: bool = False,
         no_poll: bool = False,
         verbose: bool = True,
+        parallel: bool | None = None,
+        max_workers: int | None = None,
     ) -> None:
-        """Render all episodes in sequence."""
-        for ep in self.episodes:
-            if ep.status == "assembled" and not skip_assembly:
-                if verbose:
-                    print(f"  ✓ Episode {ep.number} already assembled, skipping.", file=sys.stderr)
-                continue
+        """Render episodes, optionally in parallel.
+
+        Parameters
+        ----------
+        parallel : bool or None
+            Override the project's parallel setting.  None = use project default.
+        max_workers : int or None
+            Override worker count.  None = use project default.
+        """
+        if parallel is None:
+            parallel = self.parallel
+        if max_workers is None:
+            max_workers = self.max_workers
+
+        pending = [ep for ep in self.episodes if ep.status != "assembled"]
+        if not pending:
+            if verbose:
+                print("  All episodes already assembled.", file=sys.stderr)
+            return
+
+        # Already-assembled episodes
+        done_count = len(self.episodes) - len(pending)
+        if verbose and done_count:
+            print(f"  {done_count} episode(s) already done, skipping.", file=sys.stderr)
+        if verbose:
+            print(f"  Rendering {len(pending)} episode(s)...", file=sys.stderr)
+
+        cfg = self._build_cfg()
+
+        if parallel and len(pending) > 1:
+            self._render_parallel(
+                pending,
+                skip_images=skip_images,
+                skip_video=skip_video,
+                skip_assembly=skip_assembly,
+                no_poll=no_poll,
+                max_workers=max_workers,
+                verbose=verbose,
+            )
+        else:
+            self._render_sequential(
+                pending,
+                skip_images=skip_images,
+                skip_video=skip_video,
+                skip_assembly=skip_assembly,
+                no_poll=no_poll,
+                verbose=verbose,
+            )
+
+    def _render_sequential(
+        self,
+        episodes: list[EpisodeInfo],
+        *,
+        skip_images: bool = False,
+        skip_video: bool = False,
+        skip_assembly: bool = False,
+        no_poll: bool = False,
+        verbose: bool = True,
+    ) -> None:
+        """Render episodes one at a time."""
+        for ep in episodes:
             self.render_episode(
                 ep.number,
                 skip_images=skip_images,
@@ -374,6 +467,63 @@ class Project:
                 no_poll=no_poll,
                 verbose=verbose,
             )
+
+    def _render_parallel(
+        self,
+        episodes: list[EpisodeInfo],
+        *,
+        skip_images: bool = False,
+        skip_video: bool = False,
+        skip_assembly: bool = False,
+        no_poll: bool = False,
+        max_workers: int = 2,
+        verbose: bool = True,
+    ) -> None:
+        """Render multiple episodes concurrently.
+
+        A threading.Lock protects stderr output from interleaving.
+        Per-episode API calls (image + video gen) are the bottleneck,
+        so parallel CPU work is negligible.
+        """
+        lock = threading.Lock()
+
+        def _worker(ep_num: int) -> int:
+            """Render one episode; return its number on success."""
+            self.render_episode(
+                ep_num,
+                skip_images=skip_images,
+                skip_video=skip_video,
+                skip_assembly=skip_assembly,
+                no_poll=no_poll,
+                verbose=verbose,
+                _lock=lock,
+            )
+            return ep_num
+
+        # Only parallelise episodes that need actual work
+        todo = [ep.number for ep in episodes]
+
+        if verbose:
+            with lock:
+                print(
+                    f"  Parallel rendering {len(todo)} episode(s) "
+                    f"with {max_workers} worker(s)...",
+                    file=sys.stderr,
+                )
+
+        with ThreadPoolExecutor(max_workers=max_workers) as pool:
+            futures = {pool.submit(_worker, num): num for num in todo}
+            for future in as_completed(futures):
+                num = futures[future]
+                try:
+                    future.result()
+                except Exception as exc:
+                    if verbose:
+                        with lock:
+                            print(
+                                f"  ✗ Episode {num} failed: {exc}",
+                                file=sys.stderr,
+                            )
 
     # ── Status ──────────────────────────────────────────────────────
 

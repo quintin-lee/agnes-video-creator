@@ -370,6 +370,9 @@ def cmd_project_init(args: argparse.Namespace) -> None:
         add_audio=not args.no_audio,
         add_subtitles=not args.no_subtitles,
         video_mode=args.mode,
+        parallel=args.parallel,
+        max_workers=args.max_workers,
+        preview_storyboard=not args.no_storyboard,
     )
     print(f"Project created: {project.root}/", file=sys.stderr)
     if args.novel:
@@ -407,6 +410,13 @@ def cmd_project_render(args: argparse.Namespace) -> None:
         raise SystemExit("No project.json found in current or parent directories.")
     project = Project.load(proj_path)
 
+    if getattr(args, "parallel", False):
+        project.parallel = True
+    if getattr(args, "max_workers", 0):
+        project.max_workers = args.max_workers
+    if hasattr(args, "no_storyboard") and args.no_storyboard:
+        project.preview_storyboard = False
+
     if args.episode:
         project.render_episode(
             args.episode,
@@ -423,8 +433,11 @@ def cmd_project_render(args: argparse.Namespace) -> None:
             skip_assembly=args.skip_assembly,
             no_poll=args.no_poll,
             verbose=not args.quiet,
+            parallel=project.parallel,
+            max_workers=project.max_workers,
         )
 
+    project.save()
     print(f"\n{project.status_report()}", file=sys.stderr)
 
 
@@ -551,6 +564,12 @@ def build_parser() -> argparse.ArgumentParser:
     p_init.add_argument("--mode", default="image-to-video",
                         choices=("text-to-video", "image-to-video", "keyframes"),
                         help="Video mode (default: image-to-video)")
+    p_init.add_argument("--parallel", "-j", action="store_true",
+                        help="Enable parallel episode rendering (default: sequential)")
+    p_init.add_argument("--max-workers", type=int, default=2,
+                        help="Max parallel workers (default: 2)")
+    p_init.add_argument("--no-storyboard", action="store_true",
+                        help="Disable storyboard preview after images")
     p_init.set_defaults(func=cmd_project_init)
 
     p_status = project_sub.add_parser("status", help="Show project status")
@@ -563,6 +582,12 @@ def build_parser() -> argparse.ArgumentParser:
     p_render.add_argument("--skip-images", action="store_true", help="Skip image generation")
     p_render.add_argument("--skip-video", action="store_true", help="Skip video generation")
     p_render.add_argument("--skip-assembly", action="store_true", help="Skip assembly")
+    p_render.add_argument("--parallel", "-j", action="store_true",
+                          help="Render episodes concurrently")
+    p_render.add_argument("--max-workers", type=int, default=0,
+                          help="Max parallel workers (default: 2)")
+    p_render.add_argument("--no-storyboard", action="store_true",
+                          help="Skip storyboard preview after images")
     p_render.set_defaults(func=cmd_project_render)
 
     p_analyze = project_sub.add_parser("analyze", help="Analyze novel and create episode scripts")
