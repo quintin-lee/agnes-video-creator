@@ -643,6 +643,53 @@ def create_app() -> FastAPI:
             "summary": report.summary,
         }
 
+    # ── API: Project-level consistency check ────────────────────────
+
+    @app.get("/api/projects/{name}/check")
+    def check_project_all(name: str):
+        """Run consistency check on ALL episodes in a project."""
+        root = _projects_dir() / name
+        proj_file = root / "project.json"
+        if not proj_file.exists():
+            raise HTTPException(404, f"Project '{name}' not found")
+
+        project = Project.load(proj_file)
+        results: list[dict] = []
+        total_critical = 0
+        total_warnings = 0
+
+        cfg = AgnesConfig()
+        for ep in project.episodes:
+            if not ep.script_path or not Path(ep.script_path).exists():
+                continue
+            report = check_script_file([ep.script_path], cfg=cfg, verbose=False)
+            total_critical += report.critical_count
+            total_warnings += report.warning_count
+            results.append({
+                "episode": ep.number,
+                "critical": report.critical_count,
+                "warnings": report.warning_count,
+                "issues": [
+                    {
+                        "severity": i.severity,
+                        "category": i.category,
+                        "description": i.description,
+                        "location": i.location,
+                        "suggestion": i.suggestion,
+                    }
+                    for i in report.issues
+                ],
+                "summary": report.summary,
+            })
+
+        return {
+            "project": name,
+            "total_critical": total_critical,
+            "total_warnings": total_warnings,
+            "episode_count": len(results),
+            "episodes": results,
+        }
+
     # ── API: Log streaming (SSE) ────────────────────────────────────
 
     @app.get("/api/logs/{name:path}")

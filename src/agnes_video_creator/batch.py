@@ -384,19 +384,22 @@ class BatchWorker:
                 project.analyze_novel(max_episodes=12, verbose=False)
                 project.save()
             elif job.job_type == "check":
-                # Checks are fast — run inline
                 from agnes_video_creator.consistency import check_script_file
                 from agnes_video_creator.config import AgnesConfig
 
-                ep_info = None
-                if job.episode_num:
+                cfg = AgnesConfig()
+                if job.episode_num == 0:
+                    # episode_num=0 means check all episodes
+                    for ep in project.episodes:
+                        if ep.script_path and Path(ep.script_path).exists():
+                            check_script_file(ep.script_path, cfg=cfg, verbose=False)
+                elif job.episode_num:
                     ep_info = next(
                         (e for e in project.episodes if e.number == job.episode_num),
                         None,
                     )
-                if ep_info and ep_info.script_path:
-                    cfg = AgnesConfig()
-                    check_script_file(ep_info.script_path, cfg=cfg, verbose=False)
+                    if ep_info and ep_info.script_path:
+                        check_script_file(ep_info.script_path, cfg=cfg, verbose=False)
 
             self._queue.complete(job.id)
         except Exception as e:
