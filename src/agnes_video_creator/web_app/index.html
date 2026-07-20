@@ -575,8 +575,19 @@ const App = {
             <div id="export-feedback-${ep}" class="text-xs text-muted" style="margin-top:4px"></div>
           </div>`:""}
         </div></div>
+        <div class="card"><h2>Cost Estimate</h2><div id="cost-estimate" class="text-sm"><span class="pulse text-muted">Loading...</span></div></div>
         <div class="card"><h2>Log</h2><div class="log-viewer" id="log-viewer"></div></div>
       </div></div>`;
+    // Load cost estimate
+    (async()=>{
+      try{
+        const r=await this.api("/api/projects/"+encodeURIComponent(name)+"/estimate/"+ep);
+        const ce=document.getElementById("cost-estimate");
+        if(!ce)return;
+        ce.innerHTML='<span style="color:var(--text2)">\$'+(r.total_cost||"0").toFixed(2)+'</span> <span class="text-muted text-xs">estimated</span><br>'
+          +'<span class="text-xs text-muted">'+r.scene_count+' scene(s) &middot; ~'+(r.total_time_seconds?Math.round(r.total_time_seconds/60)+' min':"<1 min")+'</span>';
+      }catch(e){}
+    })();
   },
 };
 App.init();

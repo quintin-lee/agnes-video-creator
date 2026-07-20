@@ -442,6 +442,53 @@ def create_app() -> FastAPI:
             "url": f"/api/projects/{name}/videos/{dst.name}",
         }
 
+    # ── API: Cost estimate ──────────────────────────────────────────
+
+    @app.get("/api/projects/{name}/estimate")
+    @app.get("/api/projects/{name}/estimate/{num}")
+    def estimate_cost(name: str, num: int | None = None):
+        """Return estimated cost and time for a project or single episode."""
+        from agnes_video_creator.cost_estimator import estimate_episode, estimate_project
+
+        root = _projects_dir() / name
+        proj_file = root / "project.json"
+        if not proj_file.exists():
+            raise HTTPException(404, f"Project '{name}' not found")
+
+        project = Project.load(proj_file)
+
+        if num is not None:
+            # Single episode estimate
+            ep_info = next((e for e in project.episodes if e.number == num), None)
+            if not ep_info:
+                raise HTTPException(404, f"Episode {num} not found")
+
+            scene_count = 0
+            if ep_info.script_path and Path(ep_info.script_path).exists():
+                script = Script.load(ep_info.script_path)
+                scene_count = len(script.scenes)
+
+            est = estimate_episode(scene_count, include_images=True, include_video=True)
+            return {"episode": num, "scene_count": scene_count, **est.to_dict()}
+
+        # Project-level estimate
+        total_scenes = 0
+        episode_count = 0
+        for ep in project.episodes:
+            episode_count += 1
+            if ep.script_path and Path(ep.script_path).exists():
+                script = Script.load(ep.script_path)
+                total_scenes += len(script.scenes)
+
+        est = estimate_project(total_scenes, episodes=episode_count,
+                               include_images=True, include_video=True)
+        return {
+            "project": name,
+            "episode_count": episode_count,
+            "total_scenes": total_scenes,
+            **est.to_dict(),
+        }
+
     # ── API: Episode detail ─────────────────────────────────────────
 
     @app.get("/api/projects/{name}/episodes/{num}")
