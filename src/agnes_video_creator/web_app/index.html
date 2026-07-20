@@ -302,7 +302,29 @@ const App = {
       <td><span class="status-tag ${this.sc(e.status)}">${this.sl(e.status)}</span></td>
       <td class="text-muted text-sm">${e.output_path?"\u2713":"\u2014"}</td></tr>`).join("")||'<tr><td colspan="4" style="text-align:center;color:var(--text3);padding:20px">No episodes</td></tr>';
 
-    const charItems=(data.characters||[]).map(c=>`<div class="char-item" style="display:flex;flex-wrap:wrap;gap:4px"><span class="name" style="min-width:80px">${this.esc(c.name)}</span><span class="role" style="flex:1;min-width:60px">${this.esc(c.role||"")}</span><input class="voice-input" data-char="${this.esc(c.name)}" type="text" placeholder="voice" value="${this.esc(c.voice||"")}" style="width:100px;background:var(--surface3);border:1px solid var(--border);color:var(--text);border-radius:3px;padding:1px 6px;font-size:.8em"></div>`).join("")||'<div class="empty">No characters</div>';
+    const charItems=(data.characters||[]).map(c=>{
+      const _n=this.esc(c.name);
+      return `<details class="char-sheet" style="border:1px solid var(--border);border-radius:6px;margin-bottom:6px;padding:6px 8px">
+        <summary style="cursor:pointer;font-weight:600;font-size:.9em">${_n} <span class="text-muted text-xs">${this.esc(c.role||"")}</span></summary>
+        <div class="char-fields" style="margin-top:6px;display:flex;flex-direction:column;gap:4px">
+          <label class="text-xs text-muted">Role</label>
+          <input class="cs-${_n}-role" type="text" value="${this.esc(c.role||"")}" style="width:100%;background:var(--surface3);border:1px solid var(--border);color:var(--text);border-radius:3px;padding:2px 6px;font-size:.85em">
+          <label class="text-xs text-muted">Age</label>
+          <input class="cs-${_n}-age" type="text" value="${this.esc(c.age||"")}" style="width:100%;background:var(--surface3);border:1px solid var(--border);color:var(--text);border-radius:3px;padding:2px 6px;font-size:.85em">
+          <label class="text-xs text-muted">Voice (TTS)</label>
+          <input class="cs-${_n}-voice" type="text" value="${this.esc(c.voice||"")}" placeholder="zh-CN-XiaoxiaoNeural" style="width:100%;background:var(--surface3);border:1px solid var(--border);color:var(--text);border-radius:3px;padding:2px 6px;font-size:.85em">
+          <label class="text-xs text-muted">Personality</label>
+          <textarea class="cs-${_n}-personality" rows="2" style="width:100%;background:var(--surface3);border:1px solid var(--border);color:var(--text);border-radius:3px;padding:2px 6px;font-size:.85em;resize:vertical">${this.esc(c.personality||"")}</textarea>
+          <label class="text-xs text-muted">Appearance</label>
+          <textarea class="cs-${_n}-appearance" rows="2" style="width:100%;background:var(--surface3);border:1px solid var(--border);color:var(--text2);border-radius:3px;padding:2px 6px;font-size:.8em;resize:vertical">${this.esc(c.appearance||"")}</textarea>
+          <label class="text-xs text-muted">Sample Dialogue</label>
+          <textarea class="cs-${_n}-dialogue" rows="2" style="width:100%;background:var(--surface3);border:1px solid var(--border);color:var(--text2);border-radius:3px;padding:2px 6px;font-size:.8em;resize:vertical">${this.esc(c.sample_dialogue||"")}</textarea>
+          <label class="text-xs text-muted">Backstory</label>
+          <textarea class="cs-${_n}-backstory" rows="2" style="width:100%;background:var(--surface3);border:1px solid var(--border);color:var(--text2);border-radius:3px;padding:2px 6px;font-size:.8em;resize:vertical">${this.esc(c.backstory||"")}</textarea>
+          ${c.portrait_url?`<div style="margin-top:4px"><img src="${this.esc(c.portrait_url)}" alt="${_n}" style="width:60px;height:60px;object-fit:cover;border-radius:4px;border:1px solid var(--border)"></div>`:""}
+        </div>
+      </details>`;
+    }).join("")||'<div class="empty">No characters</div>';
 
     const rl=data.is_running?"pulse":"";
     el.innerHTML=`<div class="project-header"><div class="back"><a href="#/" title="Back">\u2190</a></div>
@@ -326,7 +348,7 @@ const App = {
             <button class="btn btn-small btn-outline" onclick="App.batchSubmit('${this.esc(name)}','check',0)">Check All</button>
           </div>
           <div id="check-results" class="text-sm mt-2"></div></div>
-        <div class="card"><h2>Characters (${(data.characters||[]).length})</h2><div class="char-list">${charItems}</div><div class="mt-2" style="display:flex;align-items:center;gap:8px"><button class="btn btn-small btn-primary" onclick="App.saveVoiceMap('${this.esc(name)}')">Save Voices</button><span id="voice-feedback" class="text-sm"></span></div></div>
+        <div class="card"><h2>Characters (${(data.characters||[]).length})</h2><div class="char-list">${charItems}</div><div class="mt-2" style="display:flex;align-items:center;gap:8px"><button class="btn btn-small btn-primary" onclick="App.saveCharacterSheets('${this.esc(name)}')">Save All</button><span id="char-feedback" class="text-sm"></span></div></div>
         <div class="card"><h2>Info</h2><div class="text-sm" style="line-height:1.8">
           <div><span class="text-muted">Root:</span> ${this.esc(data.root)}</div>
           <div><span class="text-muted">Novel:</span> ${data.has_novel?"\u2713":"\u2014"}</div>
@@ -400,17 +422,25 @@ const App = {
     }catch(e){alert("Save failed: "+e.message)}
   },
 
-  async saveVoiceMap(name){
-    const inputs=document.querySelectorAll(".voice-input");
-    const vm={};
-    inputs.forEach(inp=>{const name=inp.dataset.char;if(name&&inp.value.trim())vm[name]=inp.value.trim()});
-    if(Object.keys(vm).length===0)return;
+  async saveCharacterSheets(name){
+    const chars=[];
+    document.querySelectorAll(".char-sheet").forEach(el=>{
+      const n=el.querySelector("summary")?.textContent?.trim()?.split(/\s/)[0];
+      if(!n)return;
+      const g=cn=>document.querySelector(".cs-"+n+"-"+cn)?.value??"";
+      chars.push({
+        name:n,role:g("role"),age:g("age"),voice:g("voice"),
+        personality:g("personality"),appearance:g("appearance"),
+        sample_dialogue:g("dialogue"),backstory:g("backstory")
+      });
+    });
+    if(chars.length===0)return;
     try{
-      await this.api("/api/projects/"+encodeURIComponent(name)+"/voice-map",
-        {method:"PUT",body:JSON.stringify({voice_map:vm})});
-      const fb=document.getElementById("voice-feedback");
-      if(fb){fb.textContent="\u2713 Voices saved";fb.style.color="var(--accent)";setTimeout(()=>fb.textContent="",2000)}
-    }catch(e){alert("Voice save failed: "+e.message)}
+      await this.api("/api/projects/"+encodeURIComponent(name)+"/characters",
+        {method:"PUT",body:JSON.stringify({characters:chars})});
+      const fb=document.getElementById("char-feedback");
+      if(fb){fb.textContent="\u2713 Saved";fb.style.color="var(--accent)";setTimeout(()=>fb.textContent="",2000)}
+    }catch(e){alert("Character save failed: "+e.message)}
   },
 
   async batchSubmit(project,jobType,episode=0){

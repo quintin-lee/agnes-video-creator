@@ -615,6 +615,69 @@ def create_app() -> FastAPI:
         project.save()
         return {"status": "ok", "updated": updated}
 
+    # ── API: Character sheets ───────────────────────────────────────
+
+    @app.get("/api/projects/{name}/characters")
+    def list_characters(name: str):
+        """Get full character sheets for a project."""
+        root = _projects_dir() / name
+        proj_file = root / "project.json"
+        if not proj_file.exists():
+            raise HTTPException(404, f"Project '{name}' not found")
+        project = Project.load(proj_file)
+        chars = project.get_characters()
+        return {
+            "characters": [
+                {
+                    "name": c.name,
+                    "role": c.role,
+                    "voice": c.voice,
+                    "appearance": c.appearance,
+                    "personality": c.personality,
+                    "age": c.age,
+                    "sample_dialogue": c.sample_dialogue,
+                    "backstory": c.backstory,
+                    "portrait_url": c.portrait_url,
+                }
+                for c in chars
+            ]
+        }
+
+    @app.put("/api/projects/{name}/characters")
+    async def update_characters(name: str, request: Request):
+        """Batch-update character sheets for a project."""
+        root = _projects_dir() / name
+        proj_file = root / "project.json"
+        if not proj_file.exists():
+            raise HTTPException(404, f"Project '{name}' not found")
+
+        project = Project.load(proj_file)
+        try:
+            body = await request.json()
+        except Exception:
+            raise HTTPException(422, "Invalid JSON body")
+
+        updates: list[dict] = body.get("characters", [])
+        if not updates:
+            raise HTTPException(400, "'characters' list is required")
+
+        chars = project.get_characters()
+        update_map = {u.get("name", ""): u for u in updates if u.get("name")}
+        updated = 0
+        for c in chars:
+            u = update_map.get(c.name)
+            if not u:
+                continue
+            for field in ("role", "voice", "appearance", "personality", "age",
+                          "sample_dialogue", "backstory"):
+                if field in u:
+                    setattr(c, field, u[field])
+            updated += 1
+
+        project.set_characters(chars)
+        project.save()
+        return {"status": "ok", "updated": updated}
+
     # ── API: Consistency check ──────────────────────────────────────
 
     @app.get("/api/projects/{name}/check/{num}")

@@ -92,6 +92,10 @@ class Character:
     appearance: str = ""  # visual description (injected into visual_prompts)
     voice: str = ""  # edge-tts voice name, empty = use default
     role: str = ""  # e.g. "主角", "反派", "配角"
+    personality: str = ""  # personality traits for consistent dialogue
+    age: str = ""  # age description, e.g. "mid-20s", "elderly"
+    sample_dialogue: str = ""  # example lines for TTS voice preview + style
+    backstory: str = ""  # brief background relevant to plot continuity
     portrait_path: str = ""  # local path to reference portrait image
     portrait_url: str = ""  # URL of generated portrait
     seed: int = 0  # consistent seed for image generation (0 = random)
