@@ -453,7 +453,7 @@ const App = {
 
     const sceneCards=scenes.map(s=>{
       const imgSrc=s.image_rel?"/api/projects/"+encodeURIComponent(name)+"/images/"+s.image_rel:"";
-      const vidSrc=s.video_path?"/api/projects/"+encodeURIComponent(name)+"/videos/"+s.video_path:"";
+      const vidSrc=s.video_rel?"/api/projects/"+encodeURIComponent(name)+"/videos/"+s.video_rel:"";
       const dials=(s.dialogues||[]).map(d=>`<div class="dial"><span class="cn">${this.esc(d.character||"")}</span>: ${this.esc(d.line||"")}</div>`).join("");
       const tags=(s.character_appearances||[]).map(c=>`<span class="tag">${this.esc(c)}</span>`).join("");
       return `<div class="scene-card" id="scene-edit-${s.id}"><div class="img-wrap">${

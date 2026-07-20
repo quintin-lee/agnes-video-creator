@@ -521,12 +521,44 @@ def cmd_check(args: argparse.Namespace) -> None:
     cfg = _build_cfg(args)
     _require_key(cfg)
 
-    report = check_script_file(args.script, cfg=cfg, verbose=not args.quiet)
-    report.print_report()
-    if report.critical_count > 0:
+    script_paths: list[str] = list(args.script)
+
+    # --project mode: check all episodes
+    if hasattr(args, "project_check") and args.project_check:
+        proj = find_project()
+        if not proj:
+            raise SystemExit("No project.json found. --project requires a project directory.")
+        project = Project.load(proj)
+        ep_paths = [e.script_path for e in project.episodes
+                     if e.script_path and Path(e.script_path).exists()
+                     and e.status not in ("pending",)]
+        if not ep_paths:
+            raise SystemExit("No episodes with scripts found in project.")
+        script_paths = ep_paths
+        if not args.quiet:
+            print(f"  Checking {len(script_paths)} episode(s)...", file=sys.stderr)
+
+    if not script_paths:
+        raise SystemExit("No scripts specified. Pass script file(s) or use --project.")
+
+    total_critical = 0
+    total_warnings = 0
+
+    for path in script_paths:
+        if len(script_paths) > 1:
+            print(f"\n  ── {Path(path).name} ──", file=sys.stderr)
+        report = check_script_file([path], cfg=cfg, verbose=not args.quiet)
+        total_critical += report.critical_count
+        total_warnings += report.warning_count
+
+    if len(script_paths) > 1:
+        sep = "=" * 30
+        print(f"\n  {sep}", file=sys.stderr)
+        print(f"  Total: {total_critical} critical, {total_warnings} warning(s)", file=sys.stderr)
+
+    if total_critical > 0:
         raise SystemExit(
-            f"✗ {report.critical_count} critical, "
-            f"{report.warning_count} warning(s) found."
+            f"✗ {total_critical} critical, {total_warnings} warning(s) found."
         )
 
 
@@ -798,7 +830,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     # ── check ────────────────────────────────────────────────────
     check = sub.add_parser("check", help="Check script(s) for plot continuity issues")
-    check.add_argument("script", nargs="+", help="Script JSON file path(s)")
+    check.add_argument("script", nargs="*", default=[], help="Script JSON file path(s)")
+    check.add_argument("--project", action="store_true", dest="project_check",
+                       help="Check all episodes in the current project")
     check.set_defaults(func=cmd_check)
 
     # ── novel ─────────────────────────────────────────────────────

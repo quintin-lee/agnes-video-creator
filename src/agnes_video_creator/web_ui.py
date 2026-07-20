@@ -422,6 +422,12 @@ def create_app() -> FastAPI:
                             img_rel = str(Path(s.image_path).relative_to(root))
                         except ValueError:
                             img_rel = s.image_path
+                    vid_rel = ""
+                    if s.video_path:
+                        try:
+                            vid_rel = str(Path(s.video_path).relative_to(root))
+                        except ValueError:
+                            vid_rel = s.video_path
                     scenes_data.append({
                         "id": s.id,
                         "narration": s.narration,
@@ -436,6 +442,7 @@ def create_app() -> FastAPI:
                         "image_path": s.image_path or "",
                         "image_rel": img_rel,
                         "video_path": s.video_path or "",
+                        "video_rel": vid_rel,
                     })
             except Exception as e:
                 raise HTTPException(500, f"Failed to load script: {e}")
@@ -505,15 +512,13 @@ def create_app() -> FastAPI:
 
     # ── API: Serve scene videos ─────────────────────────────────────
 
-    @app.get("/api/projects/{name}/videos/{episode_num:path}")
-    def get_scene_video(name: str, episode_num: str, file: str = Query(...)):
-        """Serve a scene video file."""
+    @app.get("/api/projects/{name}/videos/{file_path:path}")
+    def get_scene_video(name: str, file_path: str):
+        """Serve a scene video file by project-relative path."""
         root = _projects_dir() / name
-        vid_path = root / episode_num / "videos" / file
-        if not vid_path.exists():
-            vid_path = root / file
+        vid_path = root / file_path
         if not vid_path.exists() or not vid_path.is_file():
-            raise HTTPException(404, "Video not found")
+            raise HTTPException(404, f"Video not found: {file_path}")
         return FileResponse(str(vid_path), media_type="video/mp4")
 
     # ── API: Script edit (scene-level) ──────────────────────────────
