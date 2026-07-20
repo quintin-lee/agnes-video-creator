@@ -300,7 +300,12 @@ const App = {
       <td><strong>EP${String(e.number).padStart(2,"0")}</strong></td>
       <td class="truncate" style="max-width:200px">${this.esc(e.title||"(untitled)")}</td>
       <td><span class="status-tag ${this.sc(e.status)}">${this.sl(e.status)}</span></td>
-      <td class="text-muted text-sm">${e.output_path?"\u2713":"\u2014"}</td></tr>`).join("")||'<tr><td colspan="4" style="text-align:center;color:var(--text3);padding:20px">No episodes</td></tr>';
+      <td class="text-muted text-sm">${e.output_path?"\u2713":"\u2014"}</td>
+      <td class="text-xs">${e.output_path?`
+        <span style="display:flex;gap:2px">
+          <a href="#" onclick="event.stopPropagation();App.exportEpisode('${this.esc(name)}',${e.number},'9:16')" title="Export 9:16" style="color:var(--accent);text-decoration:none">v9</a>
+          <a href="#" onclick="event.stopPropagation();App.exportEpisode('${this.esc(name)}',${e.number},'1:1')" title="Export 1:1" style="color:var(--accent);text-decoration:none">sq</a>
+        </span>`:"\u2014"}</td></tr>`).join("")||'<tr><td colspan="5" style="text-align:center;color:var(--text3);padding:20px">No episodes</td></tr>';
 
     const charItems=(data.characters||[]).map(c=>{
       const _n=this.esc(c.name);
@@ -331,7 +336,7 @@ const App = {
       <div class="info"><h1>${this.esc(data.name)}</h1>
       <div class="meta">${data.episodes.length} ep(s) &middot; ${data.video_mode||"image-to-video"}${data.has_novel?" &middot; novel loaded":""}</div></div></div>
       <div class="two-col"><div class="main">
-        <div class="card"><h2>Episodes</h2><table class="ep-table"><thead><tr><th style="width:60px">#</th><th>Title</th><th style="width:100px">Status</th><th style="width:50px">Vid</th></tr></thead><tbody>${epRows}</tbody></table></div>
+        <div class="card"><h2>Episodes</h2><table class="ep-table"><thead><tr><th style="width:60px">#</th><th>Title</th><th style="width:100px">Status</th><th style="width:50px">Vid</th><th style="width:60px">Exp</th></tr></thead><tbody>${epRows}</tbody></table></div>
         <div class="card"><h2>Storyboard</h2>${data.episodes.filter(e=>e.status!=="pending").map(e=>{
           const show=e.status==="script_ready"||e.status==="images_ready"||e.status==="videos_ready"||e.status==="assembled";
           return `<div class="mb-2"><a href="#/projects/${encodeURIComponent(name)}/episodes/${e.number}">EP${String(e.number).padStart(2,"0")} ${this.esc(e.title||"")}</a>${show?` <span style="float:right"><a href="/api/projects/${encodeURIComponent(name)}/storyboard/${e.number}" target="_blank" class="text-sm">View \u2192</a></span>`:""}</div>`
@@ -463,6 +468,18 @@ const App = {
     }catch(e){alert("Submit failed: "+e.message)}
   },
 
+  async exportEpisode(name,ep,aspect){
+    const fb=document.getElementById("export-feedback-"+ep);
+    if(fb)fb.textContent="Cropping to "+aspect+"...";
+    try{
+      const r=await this.api("/api/projects/"+encodeURIComponent(name)+"/episodes/"+ep+"/export",
+        {method:"POST",body:JSON.stringify({aspect})});
+      if(fb)fb.innerHTML='\u2713 <a href="'+r.url+'" target="_blank" style="color:var(--accent)">'+aspect+'</a>';
+    }catch(e){
+      if(fb)fb.innerHTML='<span style="color:var(--red)">Failed: '+this.esc(e.message)+'</span>';
+    }
+  },
+
   _attachLog(name){
     const lv=document.getElementById("log-viewer");if(!lv)return;
     lv.textContent="";lv.classList.add("cursor");
@@ -542,12 +559,21 @@ const App = {
       <div class="two-col"><div class="main">
         <div class="card"><h2>Scenes</h2><div class="scene-grid">${sceneCards}</div></div>
         ${data.output_path?`<div class="card"><h2>Output</h2><div class="text-sm"><a href="/${data.output_path}" target="_blank">${this.esc(data.output_path)}</a></div></div>`:""}
-      </div><div class="side">
+      </div>      <div class="side">
         <div class="card"><h2>Controls</h2><div class="controls">
           <button class="btn btn-primary ${rl}" id="btn-render-ep${ep}" onclick="App.runRenderEpisode('${this.esc(name)}',${ep})" ${data.is_running?"disabled":""}>Render Episode</button>
           ${data.status==="script_ready"||data.status==="images_ready"||data.status==="videos_ready"||data.status==="assembled"?`<a class="btn btn-outline" href="/api/projects/${encodeURIComponent(name)}/storyboard/${ep}" target="_blank">Storyboard</a>`:""}
           <button class="btn btn-small btn-outline" onclick="App.batchSubmit('${this.esc(name)}','render_episode',${ep})" style="font-size:.75em">Queue</button>
           <button class="btn btn-small btn-outline" onclick="App.batchSubmit('${this.esc(name)}','check',${ep})" style="font-size:.75em">Check</button>
+          ${data.output_path?`<div style="margin-top:8px;border-top:1px solid var(--border);padding-top:8px">
+            <span style="font-weight:600;font-size:.85em">Export</span>
+            <div style="display:flex;gap:4px;margin-top:4px">
+              <button class="btn btn-small btn-outline" onclick="App.exportEpisode('${this.esc(name)}',${ep},'9:16')">9:16</button>
+              <button class="btn btn-small btn-outline" onclick="App.exportEpisode('${this.esc(name)}',${ep},'1:1')">1:1</button>
+              <button class="btn btn-small btn-outline" onclick="App.exportEpisode('${this.esc(name)}',${ep},'4:3')">4:3</button>
+            </div>
+            <div id="export-feedback-${ep}" class="text-xs text-muted" style="margin-top:4px"></div>
+          </div>`:""}
         </div></div>
         <div class="card"><h2>Log</h2><div class="log-viewer" id="log-viewer"></div></div>
       </div></div>`;

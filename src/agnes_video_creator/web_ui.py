@@ -402,6 +402,46 @@ def create_app() -> FastAPI:
         project.render_all(verbose=True, parallel=project.parallel, max_workers=project.max_workers)
         project.save()
 
+    # ── API: Export (crop to aspect ratio) ──────────────────────────
+
+    @app.post("/api/projects/{name}/episodes/{num}/export")
+    async def export_episode(name: str, num: int, request: Request):
+        """Export an episode video cropped to a target aspect ratio."""
+        from agnes_video_creator.assembler import export_crop
+
+        root = _projects_dir() / name
+        proj_file = root / "project.json"
+        if not proj_file.exists():
+            raise HTTPException(404, f"Project '{name}' not found")
+
+        project = Project.load(proj_file)
+        ep_info = next((e for e in project.episodes if e.number == num), None)
+        if not ep_info or not ep_info.output_path or not Path(ep_info.output_path).exists():
+            raise HTTPException(404, f"Episode {num} output video not found")
+
+        try:
+            body = await request.json()
+        except Exception:
+            raise HTTPException(422, "Invalid JSON body")
+
+        aspect = str(body.get("aspect", "9:16"))
+        if aspect not in ("16:9", "9:16", "1:1", "4:3", "21:9"):
+            raise HTTPException(400, f"Unsupported aspect '{aspect}'. Use 16:9, 9:16, 1:1, 4:3, or 21:9.")
+
+        src = Path(ep_info.output_path)
+        dst = root / f"{src.stem}_{aspect.replace(':', 'x')}.mp4"
+
+        export_crop(src, dst, aspect=aspect)
+        if not dst.exists():
+            raise HTTPException(500, "Export failed — ffmpeg error")
+
+        return {
+            "status": "ok",
+            "aspect": aspect,
+            "path": str(dst.relative_to(root)),
+            "url": f"/api/projects/{name}/videos/{dst.name}",
+        }
+
     # ── API: Episode detail ─────────────────────────────────────────
 
     @app.get("/api/projects/{name}/episodes/{num}")

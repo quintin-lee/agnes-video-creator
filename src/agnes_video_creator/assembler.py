@@ -1036,3 +1036,52 @@ def _add_bgm(
     if output.exists():
         return output
     return video_path
+
+
+# ── Aspect-ratio presets ────────────────────────────────────────────
+
+ASPECT_PRESETS: dict[str, tuple[int, int]] = {
+    "16:9": (1920, 1080),
+    "9:16": (1080, 1920),   # TikTok / Reels vertical
+    "1:1":  (1080, 1080),   # Instagram square
+    "4:3":  (1440, 1080),
+    "21:9": (2560, 1080),   # ultrawide cinematic
+}
+
+def export_crop(
+    src: Path,
+    dst: Path,
+    aspect: str = "16:9",
+    verbose: bool = True,
+) -> Path:
+    """Crop a video to the target aspect ratio using a centered crop.
+
+    Preserves source height, crops width to fit ratio.
+    Falls back to source path if target is same as source or if crop fails.
+    """
+    if dst.exists():
+        return dst
+
+    target = ASPECT_PRESETS.get(aspect)
+    if not target:
+        raise ValueError(f"Unknown aspect ratio '{aspect}'. Supported: {', '.join(ASPECT_PRESETS)}")
+
+    tw, th = target
+    cmd = [
+        "ffmpeg", "-y",
+        "-i", str(src),
+        "-vf", f"crop=(in_h*{tw}/{th}):in_h:(in_w-in_h*{tw}/{th})/2:0",
+        "-c:v", "libx264",
+        "-preset", "fast",
+        "-crf", "18",
+        "-pix_fmt", "yuv420p",
+        "-c:a", "aac",
+        "-b:a", "128k",
+        "-movflags", "+faststart",
+        str(dst),
+    ]
+    _run_ffmpeg(cmd, f"crop to {aspect} ({tw}×{th})", verbose)
+
+    if dst.exists():
+        return dst
+    return src
