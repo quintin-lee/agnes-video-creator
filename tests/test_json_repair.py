@@ -96,7 +96,7 @@ class TestParseScriptJson:
     """_parse_script_json() — fence stripping, repair, brace fallback."""
 
     def test_valid_json(self) -> None:
-        raw = '{"title": "Test", "scenes": [{"id": 1, "visual_prompt": "a cat", "duration_seconds": 5.0}]}'
+        raw = '{"title": "Test", "scenes": [{"id": 1, "visual_prompt": "a cat", "duration_seconds": 5.0}]}'  # noqa: E501
         script = _parse_script_json(raw, "fallback")
         assert script.title == "Test"
         assert len(script.scenes) == 1
@@ -117,7 +117,7 @@ class TestParseScriptJson:
         assert script.title == "NoLang"
 
     def test_repair_literal_newlines(self) -> None:
-        raw = '{"title": "Repaired", "scenes": [{"id": 1, "narration": "line1\nline2", "visual_prompt": "a fox", "duration_seconds": 5.0}]}'
+        raw = '{"title": "Repaired", "scenes": [{"id": 1, "narration": "line1\nline2", "visual_prompt": "a fox", "duration_seconds": 5.0}]}'  # noqa: E501
         script = _parse_script_json(raw, "fallback")
         assert script.title == "Repaired"
         assert script.scenes[0].narration == "line1\nline2"

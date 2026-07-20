@@ -2,14 +2,12 @@
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 from typing import Any
 
 import pytest
 
-from agnes_video_creator.models import Character, FaceFeatures, Scene, Script
-
+from agnes_video_creator.models import Character, Scene, Script
 
 # ── Helpers ──────────────────────────────────────────────────────────────
 

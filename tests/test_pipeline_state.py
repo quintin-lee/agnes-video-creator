@@ -99,14 +99,20 @@ class TestEpisodeState:
     def test_all_images_done_false_when_pending(self) -> None:
         ep = EpisodeState(
             episode_number=1,
-            scenes=[SceneState(scene_id=1, image="success"), SceneState(scene_id=2, image="pending")],
+            scenes=[
+                SceneState(scene_id=1, image="success"),
+                SceneState(scene_id=2, image="pending"),
+            ],
         )
         assert not ep.all_images_done
 
     def test_all_videos_done_true(self) -> None:
         ep = EpisodeState(
             episode_number=1,
-            scenes=[SceneState(scene_id=1, video="success"), SceneState(scene_id=2, video="success")],
+            scenes=[
+                SceneState(scene_id=1, video="success"),
+                SceneState(scene_id=2, video="success"),
+            ],
         )
         assert ep.all_videos_done
 

@@ -71,7 +71,7 @@ class TestBatchQueue:
     def test_claim_pending_fifo(self, tmp_path: Path) -> None:
         q = self._make_queue(tmp_path)
         first = q.submit("analyze", "p1")
-        second = q.submit("check", "p2")
+        q.submit("check", "p2")
 
         claimed = q.claim_pending()
         assert claimed is not None
@@ -85,7 +85,7 @@ class TestBatchQueue:
 
     def test_claim_pending_skips_running(self, tmp_path: Path) -> None:
         q = self._make_queue(tmp_path)
-        job = q.submit("analyze", "test")
+        q.submit("analyze", "test")
         q.claim_pending()
         assert q.claim_pending() is None  # only one pending, now running
 
