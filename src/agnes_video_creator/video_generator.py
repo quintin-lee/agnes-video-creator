@@ -146,19 +146,25 @@ def _render_scenes(
             payload["image"] = scene.image_url  # single image
 
         # Create the video task
-        created = request_json("POST", "/v1/videos", payload, cfg=cfg)
+        try:
+            created = request_json("POST", "/v1/videos", payload, cfg=cfg)
+        except (SystemExit, Exception) as exc:
+            msg = str(exc).split("\n")[0][:300] if str(exc) else str(exc)
+            print(f"    ✗ Failed: {msg}", file=sys.stderr)
+            clean = final_prompt[:400].replace("\n", " ")
+            print(f"      Prompt: {clean}…" if len(final_prompt) > 400 else f"      Prompt: {clean}", file=sys.stderr)
+            print(f"      Skipping scene {scene.id}.", file=sys.stderr)
+            continue
+
         task_id = str(created.get("id") or created.get("task_id", ""))
         if not task_id:
-            raise SystemExit(
-                f"Scene {scene.id}: create response missing id — "
-                f"{json.dumps(created)}"
-            )
-
-        if verbose:
             print(
-                f"    Task created: {task_id}",
+                f"    ✗ Scene {scene.id}: create response missing id — "
+                f"{json.dumps(created)[:200]}",
                 file=sys.stderr,
             )
+            print(f"      Skipping scene {scene.id}.", file=sys.stderr)
+            continue
 
         if not poll:
             # Save task ID and continue
@@ -174,10 +180,13 @@ def _render_scenes(
         data = poll_video_task(task_id, cfg)
         url = _extract_video_url(data)
         if not url:
-            raise SystemExit(
-                f"Scene {scene.id}: completed but no video URL — "
-                f"{json.dumps(data)}"
+            print(
+                f"    ✗ Scene {scene.id}: completed but no video URL — "
+                f"{json.dumps(data, ensure_ascii=False)[:200]}",
+                file=sys.stderr,
             )
+            print(f"      Skipping scene {scene.id}.", file=sys.stderr)
+            continue
 
         scene.video_url = url
 
@@ -269,13 +278,23 @@ def _render_keyframes(
             },
         }
 
-        created = request_json("POST", "/v1/videos", payload, cfg=cfg)
+        try:
+            created = request_json("POST", "/v1/videos", payload, cfg=cfg)
+        except (SystemExit, Exception) as exc:
+            msg = str(exc).split("\n")[0][:300] if str(exc) else str(exc)
+            print(f"    ✗ Failed: {msg}", file=sys.stderr)
+            print(f"      Skipping keyframe {i + 1} (scene {scene_a.id} → {scene_b.id}).", file=sys.stderr)
+            continue
+
         task_id = str(created.get("id") or created.get("task_id", ""))
         if not task_id:
-            raise SystemExit(
-                f"Keyframe {i + 1}: create response missing id — "
-                f"{json.dumps(created)}"
+            print(
+                f"    ✗ Keyframe {i + 1}: create response missing id — "
+                f"{json.dumps(created)[:200]}",
+                file=sys.stderr,
             )
+            print(f"      Skipping keyframe {i + 1} (scene {scene_a.id} → {scene_b.id}).", file=sys.stderr)
+            continue
 
         if verbose:
             print(f"    Task created: {task_id}", file=sys.stderr)
@@ -286,10 +305,13 @@ def _render_keyframes(
         data = poll_video_task(task_id, cfg)
         url = _extract_video_url(data)
         if not url:
-            raise SystemExit(
-                f"Keyframe {i + 1}: completed but no video URL — "
-                f"{json.dumps(data)}"
+            print(
+                f"    ✗ Keyframe {i + 1}: completed but no video URL — "
+                f"{json.dumps(data, ensure_ascii=False)[:200]}",
+                file=sys.stderr,
             )
+            print(f"      Skipping keyframe {i + 1} (scene {scene_a.id} → {scene_b.id}).", file=sys.stderr)
+            continue
 
         # Store on scene_b (the transition result)
         scene_b.video_url = url
