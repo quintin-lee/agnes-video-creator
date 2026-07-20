@@ -83,9 +83,20 @@ def assemble_video(
             file=sys.stderr,
         )
 
+    # ── Step 0: Trim clips ────────────────────────────────
+    trimmed = []
+    for i, clip in enumerate(clip_paths):
+        scene = script.scenes[i] if i < len(script.scenes) else None
+        if scene and (scene.trim_in or scene.trim_out):
+            trim_path = temp_dir / f"trim_{i:04d}.mp4"
+            _trim_clip(clip, trim_path, scene.trim_in, scene.trim_out, verbose)
+            trimmed.append(trim_path)
+        else:
+            trimmed.append(clip)
+
     # ── Step 1: Normalise all clips with camera motion ─────────
     normalised = []
-    for i, clip in enumerate(clip_paths):
+    for i, clip in enumerate(trimmed):
         norm_path = temp_dir / f"norm_{i:04d}.mp4"
         camera = script.scenes[i].camera if i < len(script.scenes) else ""
         _normalise_clip(clip, norm_path, cfg, verbose, camera_desc=camera)
@@ -241,6 +252,51 @@ def _camera_motion_filter(
 
     # Static / default — no filter
     return ""
+
+
+def _trim_clip(
+    src: Path,
+    dst: Path,
+    trim_in: float,
+    trim_out: float,
+    verbose: bool = True,
+) -> None:
+    """Trim a video clip: cut trim_in seconds from start, trim_out from end."""
+    if dst.exists():
+        return
+    if trim_in <= 0 and trim_out <= 0:
+        # Nothing to trim — copy as-is
+        import shutil
+        shutil.copy2(src, dst)
+        return
+
+    dur = _get_duration(src)
+    if dur <= 0:
+        if verbose:
+            print(f"    ⚠ Cannot determine duration for {src.name}, skipping trim", file=sys.stderr)
+        import shutil
+        shutil.copy2(src, dst)
+        return
+
+    start = trim_in
+    end = dur - trim_out
+    if end <= start:
+        if verbose:
+            print(f"    ⚠ Trim in/out would leave empty clip ({start}s → {end}s), keeping original", file=sys.stderr)
+        import shutil
+        shutil.copy2(src, dst)
+        return
+
+    duration = end - start
+    cmd = [
+        "ffmpeg", "-y",
+        "-ss", f"{start:.3f}",
+        "-i", str(src),
+        "-t", f"{duration:.3f}",
+        "-c", "copy",
+        str(dst),
+    ]
+    _run_ffmpeg(cmd, f"trim {src.name} [{start:.1f}s → {end:.1f}s]", verbose)
 
 
 def _normalise_clip(

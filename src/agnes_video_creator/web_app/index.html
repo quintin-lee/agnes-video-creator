@@ -422,6 +422,19 @@ const App = {
     }catch(e){alert("Save failed: "+e.message)}
   },
 
+  async trimScene(name,ep,sceneId){
+    const el=document.getElementById("scene-edit-"+sceneId);
+    if(!el)return;
+    const trimIn=parseFloat(el.querySelector(".trim-in-"+sceneId)?.value)||0;
+    const trimOut=parseFloat(el.querySelector(".trim-out-"+sceneId)?.value)||0;
+    try{
+      await this.api("/api/projects/"+encodeURIComponent(name)+"/episodes/"+ep+"/scene/"+sceneId+"/trim",
+        {method:"PUT",body:JSON.stringify({trim_in:trimIn,trim_out:trimOut})});
+      const fb=el.querySelector(".save-feedback");
+      if(fb){fb.textContent="\u2713 Trimmed";fb.style.color="var(--accent)";setTimeout(()=>fb.textContent="",2000)}
+    }catch(e){alert("Trim failed: "+e.message)}
+  },
+
   async saveCharacterSheets(name){
     const chars=[];
     document.querySelectorAll(".char-sheet").forEach(el=>{
@@ -508,8 +521,13 @@ const App = {
         <div class="narr"><textarea class="edit-narration" rows="2" style="width:100%;background:var(--surface3);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:4px;font-size:.85em;font-family:var(--font);resize:vertical">${this.esc(s.narration||"")}</textarea></div>
         <div style="margin-top:4px"><textarea class="edit-prompt" rows="2" style="width:100%;background:var(--surface3);border:1px solid var(--border);color:var(--text2);border-radius:4px;padding:4px;font-size:.8em;font-family:var(--mono);resize:vertical">${this.esc(s.visual_prompt||"")}</textarea></div>
         ${dials}${tags?`<div class="tags">${tags}</div>`:""}
-        <div class="si" style="display:flex;align-items:center;justify-content:space-between;margin-top:6px">
+        <div class="si" style="display:flex;align-items:center;flex-wrap:wrap;gap:4px;margin-top:6px">
           <span><span class="d ${s.is_image_ready?"ok":"no"}"></span>img <span class="d ${s.is_video_ready?"ok":"no"}"></span>vid</span>
+          <span class="text-xs text-muted" style="margin-left:auto">Trim:
+            <input class="trim-in-${s.id}" type="number" step="0.1" min="0" max="30" value="${(s.trim_in||0).toFixed(1)}" title="Trim from start (seconds)" style="width:36px;background:var(--surface3);border:1px solid var(--border);color:var(--text);border-radius:3px;padding:1px 3px;font-size:.8em">in
+            <input class="trim-out-${s.id}" type="number" step="0.1" min="0" max="30" value="${(s.trim_out||0).toFixed(1)}" title="Trim from end (seconds)" style="width:36px;background:var(--surface3);border:1px solid var(--border);color:var(--text);border-radius:3px;padding:1px 3px;font-size:.8em">out
+            <button class="btn-trim-${s.id}" onclick="App.trimScene('${this.esc(name)}',${ep},${s.id})" style="background:none;border:1px solid var(--border);color:var(--text2);border-radius:3px;cursor:pointer;padding:1px 6px;font-size:.75em">Trim</button>
+          </span>
           <span><button class="btn btn-small btn-primary" onclick="App.saveScene('${this.esc(name)}',${ep},${s.id})" style="padding:2px 8px;font-size:.75em">Save</button><span class="save-feedback text-sm" style="margin-left:6px"></span></span>
         </div>
       </div></div>`;

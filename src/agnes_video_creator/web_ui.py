@@ -581,6 +581,41 @@ def create_app() -> FastAPI:
 
         return {"status": "ok", "scene_id": scene_id}
 
+    # ── API: Scene trim ─────────────────────────────────────────────
+
+    @app.put("/api/projects/{name}/episodes/{num}/scene/{scene_id}/trim")
+    async def trim_scene(name: str, num: int, scene_id: int, request: Request):
+        """Set trim in/out points for a scene video clip."""
+        root = _projects_dir() / name
+        proj_file = root / "project.json"
+        if not proj_file.exists():
+            raise HTTPException(404, f"Project '{name}' not found")
+
+        project = Project.load(proj_file)
+        ep_info = next((e for e in project.episodes if e.number == num), None)
+        if not ep_info or not ep_info.script_path or not Path(ep_info.script_path).exists():
+            raise HTTPException(404, f"Episode {num} script not found")
+
+        try:
+            body = await request.json()
+        except Exception:
+            raise HTTPException(422, "Invalid JSON body")
+
+        trim_in = float(body.get("trim_in", 0))
+        trim_out = float(body.get("trim_out", 0))
+        if trim_in < 0 or trim_out < 0:
+            raise HTTPException(400, "trim_in and trim_out must be >= 0")
+
+        script = Script.load(ep_info.script_path)
+        scene = next((s for s in script.scenes if s.id == scene_id), None)
+        if not scene:
+            raise HTTPException(404, f"Scene {scene_id} not found")
+
+        scene.trim_in = trim_in
+        scene.trim_out = trim_out
+        script.save()
+        return {"status": "ok", "scene_id": scene_id, "trim_in": trim_in, "trim_out": trim_out}
+
     # ── API: Voice-map assignment ───────────────────────────────────
 
     @app.put("/api/projects/{name}/voice-map")

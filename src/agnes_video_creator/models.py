@@ -121,6 +121,8 @@ class Scene:
     # Each dialogue: {"character": "name", "line": "spoken text"}
     sfx: str = ""
     # Sound effect description for this scene, e.g. "wind howling, footsteps on gravel"
+    trim_in: float = 0.0  # seconds to cut from start of video
+    trim_out: float = 0.0  # seconds to cut from end of video
 
     @property
     def is_image_ready(self) -> bool:
