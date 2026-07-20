@@ -164,12 +164,16 @@ class BatchQueue:
             ).fetchone()
             if row is None:
                 return None
+            now = _now()
             conn.execute(
                 "UPDATE jobs SET status = 'running', started_at = ? WHERE id = ?",
-                (_now(), row["id"]),
+                (now, row["id"]),
             )
             conn.commit()
-            return self._row_to_job(row)
+            job = self._row_to_job(row)
+            job.status = "running"
+            job.started_at = now
+            return job
 
     def complete(self, job_id: str, *, error: str = "") -> None:
         """Mark a job as completed or failed."""
@@ -285,6 +289,45 @@ class BatchWorker:
         self._running = False
         self._thread: threading.Thread | None = None
 
+    @staticmethod
+    def _resolve_project_root(project_name: str) -> Path | None:
+        """Locate a project.json by name, searching multiple locations.
+
+        Returns the path to project.json or None.
+        """
+        # 1) AGNES_PROJECTS_DIR env var
+        env_dir = os.environ.get("AGNES_PROJECTS_DIR")
+        if env_dir:
+            candidate = Path(env_dir) / project_name / "project.json"
+            if candidate.exists():
+                return candidate
+
+        # 2) ~/.agnes-video/projects/{name}/
+        candidate = Path.home() / ".agnes-video" / "projects" / project_name / "project.json"
+        if candidate.exists():
+            return candidate
+
+        # 3) CWD upward via find_project
+        try:
+            from agnes_video_creator.project import find_project
+
+            found = find_project()
+            if found:
+                # Verify the project name matches (if given)
+                import json
+                data = json.loads(found.read_text())
+                if not project_name or data.get("name") == project_name:
+                    return found
+        except Exception:
+            pass
+
+        # 4) CWD / project.json direct
+        candidate = Path.cwd() / "project.json"
+        if candidate.exists():
+            return candidate
+
+        return None
+
     def start(self) -> None:
         """Start the background polling thread."""
         if self._running:
@@ -318,18 +361,13 @@ class BatchWorker:
         from agnes_video_creator.project import Project, find_project
 
         try:
-            # Locate the project
-            root = Path.home() / ".agnes-video" / "projects" / job.project
-            proj_root = root / "project.json"
-            if not proj_root.exists():
-                # Try current directory
-                cwd = Path.cwd()
-                proj_root = cwd / "project.json"
-            if not proj_root.exists():
+            proj_root = self._resolve_project_root(job.project)
+            if proj_root is None or not proj_root.exists():
                 raise FileNotFoundError(
-                    f"Project '{job.project}' not found"
+                    f"Project '{job.project}' not found. "
+                    f"Searched: ~/.agnes-video/projects/, "
+                    f"CWD + parents, $AGNES_PROJECTS_DIR"
                 )
-
             project = Project.load(proj_root)
 
             if job.job_type == "render_episode" and job.episode_num:

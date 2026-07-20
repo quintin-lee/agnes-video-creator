@@ -42,6 +42,10 @@ a:hover{text-decoration:underline}
 .stat-badge.script_ready{background:#0a1a2a;color:var(--blue)}
 .stat-badge.images_ready{background:#1a0a2a;color:var(--purple)}
 .stat-badge.videos_ready{background:#0a2a2a;color:#4dd}
+.stat-badge.completed{background:#0a2a0a;color:var(--accent)}
+.stat-badge.failed{background:#2a0a0a;color:var(--red)}
+.stat-badge.running{background:#0a1a2a;color:var(--blue)}
+.stat-badge.cancelled{background:#2a1a0a;color:var(--text3)}
 .empty-state{text-align:center;padding:60px 20px;color:var(--text3)}
 .empty-state p{margin-bottom:12px}
 
@@ -150,6 +154,7 @@ a:hover{text-decoration:underline}
   <a href="#/" class="brand">agnes-video</a>
   <span class="brand-sub">creator</span>
   <span class="spacer"></span>
+  <a href="#/batch" style="font-size:.85em;color:var(--text2);margin-right:12px">Batch</a>
   <span class="dot on" title="Connected"></span>
 </nav>
 <div class="container" id="app"></div>
@@ -162,6 +167,7 @@ const App = {
   route(){
     const h=location.hash.slice(1)||"/";
     if(h==="/")return this.renderDashboard();
+    if(h==="/batch")return this.renderBatch();
     let m=h.match(/^\/projects\/([^/]+)$/);
     if(m)return this.renderProject(decodeURIComponent(m[1]));
     m=h.match(/^\/projects\/([^/]+)\/episodes\/(\d+)$/);
@@ -202,6 +208,53 @@ const App = {
           <div class="stats">${badges}</div></div>`;
       }html+="</div>";}
     el.innerHTML=html;
+  },
+
+  bsc(s){return s==="completed"?"completed":s==="failed"?"failed":s==="running"?"running":s==="cancelled"?"cancelled":"pending"},
+  bsl(s){return{pending:"\u23F3 Pending",running:"\u25B6 Running",completed:"\u2705 Done",failed:"\u274C Failed",cancelled:"\uD83D\uDEAB Cancelled"}[s]||s},
+
+  async renderBatch(){
+    this._stopPoll();
+    const el=this.$("#app");el.innerHTML=`<div class="pulse text-muted" style="text-align:center;padding:60px">Loading...</div>`;
+    let data;
+    try{data=await this.api("/api/batch/jobs?limit=100")}
+    catch(e){el.innerHTML=`<div class="empty-state"><p style="color:var(--red)">${e.message}</p></div>`;return}
+
+    const jobs=data.jobs||[];
+    const counts=data.counts||{};
+    const summary=Object.entries(counts).map(([k,v])=>`<span class="stat-badge ${k}">${k}:${v}</span>`).join(" ");
+
+    const rows=jobs.map(j=>{
+      const ep=j.episode_num?` EP${j.episode_num}`:"";
+      return `<tr>
+        <td><code style="font-size:.8em">${this.esc(j.id)}</code></td>
+        <td><span class="stat-badge ${this.bsc(j.status)}">${this.bsl(j.status)}</span></td>
+        <td>${this.esc(j.job_type)}${ep}</td>
+        <td>${this.esc(j.project||"—")}</td>
+        <td class="text-muted text-sm">${(j.created_at||"").slice(0,19)}</td>
+        <td>${j.status==="pending"||j.status==="running"?`<button class="btn btn-small btn-danger" onclick="App.cancelBatchJob('${this.esc(j.id)}')">Cancel</button>`:""}</td>
+      </tr>`;
+    }).join("")||'<tr><td colspan="6" style="text-align:center;color:var(--text3);padding:20px">No jobs.</td></tr>';
+
+    el.innerHTML=`<div class="page-title">Batch Queue</div>
+      <div class="page-sub">${summary||"No jobs"}</div>
+      <div class="card"><table class="ep-table" style="width:100%">
+        <thead><tr><th>ID</th><th>Status</th><th>Type</th><th>Project</th><th>Created</th><th></th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table></div>
+      <div class="text-sm text-muted" style="margin-top:8px">
+        <span>Auto-refreshes every 5s. </span>
+        <a href="#/batch" onclick="App.renderBatch();return false">Refresh now</a>
+      </div>`;
+    this._poller=setInterval(()=>{this.renderBatch()},5000);
+  },
+
+  async cancelBatchJob(jobId){
+    try{
+      const r=await this.api("/api/batch/cancel/"+encodeURIComponent(jobId),{method:"POST"});
+      if(r.cancelled)this.renderBatch();
+      else alert("Could not cancel — job may already be done.");
+    }catch(e){alert("Cancel failed: "+e.message)}
   },
 
   showNewProject(){
@@ -254,6 +307,12 @@ const App = {
           <button class="btn btn-primary ${rl}" id="btn-analyze" onclick="App.runAnalyze('${this.esc(name)}')" ${data.is_running?"disabled":""}>Analyze</button>
           <button class="btn btn-primary ${rl}" id="btn-render-all" onclick="App.runRenderAll('${this.esc(name)}')" ${data.is_running?"disabled":""}>Render All</button>
           <button class="btn btn-outline ${rl}" id="btn-check" onclick="App.runCheck('${this.esc(name)}')" ${data.is_running?"disabled":""}>Check Plot</button></div>
+          <div class="text-sm text-muted" style="margin-top:8px;border-top:1px solid var(--border);padding-top:8px">
+            <span style="font-weight:600">Batch Queue:</span>
+            <button class="btn btn-small btn-outline" onclick="App.batchSubmit('${this.esc(name)}','analyze')" style="margin-left:6px">Analyze</button>
+            <button class="btn btn-small btn-outline" onclick="App.batchSubmit('${this.esc(name)}','render_all')">Render All</button>
+            <button class="btn btn-small btn-outline" onclick="App.batchSubmit('${this.esc(name)}','check',1)">Check EP1</button>
+          </div>
           <div id="check-results" class="text-sm mt-2"></div></div>
         <div class="card"><h2>Characters (${(data.characters||[]).length})</h2><div class="char-list">${charItems}</div><div class="mt-2" style="display:flex;align-items:center;gap:8px"><button class="btn btn-small btn-primary" onclick="App.saveVoiceMap('${this.esc(name)}')">Save Voices</button><span id="voice-feedback" class="text-sm"></span></div></div>
         <div class="card"><h2>Info</h2><div class="text-sm" style="line-height:1.8">
@@ -342,6 +401,13 @@ const App = {
     }catch(e){alert("Voice save failed: "+e.message)}
   },
 
+  async batchSubmit(project,jobType,episode=0){
+    try{
+      await this.api("/api/batch/submit",{method:"POST",body:JSON.stringify({job_type:jobType,project,episode})});
+      if(confirm("Job submitted to batch queue. View queue?"))this.navigate("/batch");
+    }catch(e){alert("Submit failed: "+e.message)}
+  },
+
   _attachLog(name){
     const lv=document.getElementById("log-viewer");if(!lv)return;
     lv.textContent="";lv.classList.add("cursor");
@@ -420,6 +486,8 @@ const App = {
         <div class="card"><h2>Controls</h2><div class="controls">
           <button class="btn btn-primary ${rl}" id="btn-render-ep${ep}" onclick="App.runRenderEpisode('${this.esc(name)}',${ep})" ${data.is_running?"disabled":""}>Render Episode</button>
           ${data.status==="script_ready"||data.status==="images_ready"||data.status==="videos_ready"||data.status==="assembled"?`<a class="btn btn-outline" href="/api/projects/${encodeURIComponent(name)}/storyboard/${ep}" target="_blank">Storyboard</a>`:""}
+          <button class="btn btn-small btn-outline" onclick="App.batchSubmit('${this.esc(name)}','render_episode',${ep})" style="font-size:.75em">Queue</button>
+          <button class="btn btn-small btn-outline" onclick="App.batchSubmit('${this.esc(name)}','check',${ep})" style="font-size:.75em">Check</button>
         </div></div>
         <div class="card"><h2>Log</h2><div class="log-viewer" id="log-viewer"></div></div>
       </div></div>`;
