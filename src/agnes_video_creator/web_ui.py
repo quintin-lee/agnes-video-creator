@@ -29,6 +29,7 @@ except ImportError:
 else:
     _HAS_FASTAPI = True
 
+from agnes_video_creator.batch import get_queue, get_worker, BatchJob
 from agnes_video_creator.config import AgnesConfig
 from agnes_video_creator.consistency import check_script_file
 from agnes_video_creator.models import Character, Script
@@ -680,6 +681,51 @@ def create_app() -> FastAPI:
                 "X-Accel-Buffering": "no",
             },
         )
+
+    # ── API: Batch job queue ───────────────────────────────────────
+
+    @app.post("/api/batch/submit")
+    async def batch_submit(request: Request):
+        """Submit a job to the batch queue."""
+        try:
+            raw = await request.json()
+            job_type = raw.get("job_type", "")
+            project = raw.get("project", "")
+            episode_num = int(raw.get("episode", 0))
+        except Exception:
+            raise HTTPException(422, "Invalid request body. Requires: job_type, project")
+
+        q = get_queue()
+        job = q.submit(job_type, project=project, episode_num=episode_num)
+        get_worker(q)
+        return {"status": "submitted", "job": job.to_dict()}
+
+    @app.get("/api/batch/jobs")
+    def batch_list(project: str = Query(""), limit: int = Query(50)):
+        """List recent batch jobs."""
+        q = get_queue()
+        jobs = q.list_jobs(project=project, limit=limit)
+        counts = q.count_by_status(project=project)
+        return {
+            "jobs": [j.to_dict() for j in jobs],
+            "counts": counts,
+        }
+
+    @app.get("/api/batch/jobs/{job_id}")
+    def batch_get(job_id: str):
+        """Get a single job's details."""
+        q = get_queue()
+        job = q.get_job(job_id)
+        if not job:
+            raise HTTPException(404, f"Job '{job_id}' not found")
+        return {"job": job.to_dict()}
+
+    @app.post("/api/batch/cancel/{job_id}")
+    def batch_cancel(job_id: str):
+        """Cancel a pending or running job."""
+        q = get_queue()
+        ok = q.cancel(job_id)
+        return {"cancelled": ok}
 
     # ── SPA catch-all ───────────────────────────────────────────────
 

@@ -21,6 +21,7 @@ from pathlib import Path
 from typing import Any
 
 from agnes_video_creator.assembler import assemble_video
+from agnes_video_creator.batch import get_queue, get_worker, stop_worker
 from agnes_video_creator.config import AgnesConfig
 from agnes_video_creator.consistency import check_script_file
 from agnes_video_creator.image_generator import generate_scene_images
@@ -622,6 +623,64 @@ def cmd_web(args: argparse.Namespace) -> None:
     _run_web_server(host=args.host, port=args.port)
 
 
+def cmd_batch(args: argparse.Namespace) -> None:
+    """Manage the batch job queue."""
+    q = get_queue()
+
+    if args.batch_command == "submit":
+        if args.job_type == "render_all":
+            q.submit("render_all", project=args.project)
+        elif args.job_type == "analyze":
+            q.submit("analyze", project=args.project)
+        elif args.job_type == "check":
+            q.submit("check", project=args.project, episode_num=args.episode or 0)
+        else:
+            q.submit(
+                "render_episode",
+                project=args.project,
+                episode_num=args.episode or 0,
+            )
+        print(f"  ✓ Job submitted to batch queue.", file=sys.stderr)
+        # Ensure the worker is running
+        get_worker(q)
+
+    elif args.batch_command == "list":
+        items = q.list_jobs(project=args.project or "", limit=args.limit or 50)
+        if not items:
+            print("  (no jobs)", file=sys.stderr)
+            return
+        counts = q.count_by_status(project=args.project or "")
+        print(f"  Items: {counts}", file=sys.stderr)
+        for j in items:
+            ep = f" EP{j.episode_num}" if j.episode_num else ""
+            print(
+                f"  [{j.status:>9}] {j.id}  {j.job_type}{ep}"
+                f"  {j.created_at[:19]}",
+                file=sys.stderr,
+            )
+
+    elif args.batch_command == "status":
+        job = q.get_job(args.job_id)
+        if not job:
+            raise SystemExit(f"Job '{args.job_id}' not found")
+        print(f"  ID:     {job.id}", file=sys.stderr)
+        print(f"  Type:   {job.job_type}", file=sys.stderr)
+        print(f"  Status: {job.status}", file=sys.stderr)
+        print(f"  Error:  {job.error or '—'}", file=sys.stderr)
+        print(f"  Created: {job.created_at[:19]}", file=sys.stderr)
+        if job.started_at:
+            print(f"  Started: {job.started_at[:19]}", file=sys.stderr)
+        if job.completed_at:
+            print(f"  Done:    {job.completed_at[:19]}", file=sys.stderr)
+
+    elif args.batch_command == "cancel":
+        ok = q.cancel(args.job_id)
+        if ok:
+            print(f"  ✓ Job {args.job_id} cancelled.", file=sys.stderr)
+        else:
+            print(f"  ⚠ Job {args.job_id} not found or already done.", file=sys.stderr)
+
+
 def cmd_project_status(args: argparse.Namespace) -> None:
     """Show project status."""
     proj_path = find_project()
@@ -804,6 +863,31 @@ def build_parser() -> argparse.ArgumentParser:
     web.add_argument("--host", default="127.0.0.1", help="Host to bind (default: 127.0.0.1)")
     web.add_argument("--port", type=int, default=8765, help="Port to bind (default: 8765)")
     web.set_defaults(func=cmd_web)
+
+    # ── batch ──────────────────────────────────────────────────────
+    batch = sub.add_parser("batch", help="Batch job queue management")
+    batch_sub = batch.add_subparsers(dest="batch_command", required=True)
+
+    b_submit = batch_sub.add_parser("submit", help="Submit a job to the batch queue")
+    b_submit.add_argument("job_type", choices=("render_episode", "render_all", "analyze", "check"),
+                          help="Type of job to submit")
+    b_submit.add_argument("--project", default="", help="Project name (default: auto-detect)")
+    b_submit.add_argument("--episode", type=int, default=0,
+                          help="Episode number (required for render_episode, check)")
+    b_submit.set_defaults(func=cmd_batch)
+
+    b_list = batch_sub.add_parser("list", help="List recent batch jobs")
+    b_list.add_argument("--project", default="", help="Filter by project name")
+    b_list.add_argument("--limit", type=int, default=50, help="Max items to show")
+    b_list.set_defaults(func=cmd_batch)
+
+    b_status = batch_sub.add_parser("status", help="Show job status by ID")
+    b_status.add_argument("job_id", help="Job ID")
+    b_status.set_defaults(func=cmd_batch)
+
+    b_cancel = batch_sub.add_parser("cancel", help="Cancel a pending/running job")
+    b_cancel.add_argument("job_id", help="Job ID")
+    b_cancel.set_defaults(func=cmd_batch)
 
     return parser
 
