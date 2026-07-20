@@ -25,6 +25,7 @@ from agnes_video_creator.config import AgnesConfig
 from agnes_video_creator.image_generator import generate_scene_images
 from agnes_video_creator.models import Script
 from agnes_video_creator.novel import novel_to_episodes
+from agnes_video_creator.pipeline_state import PipelineState
 from agnes_video_creator.project import Project, find_project
 from agnes_video_creator.reference import analyze_reference_video, generate_reference_script
 from agnes_video_creator.script_generator import generate_script
@@ -114,14 +115,26 @@ def cmd_create(args: argparse.Namespace) -> None:
     cfg = _build_cfg(args)
     _require_key(cfg)
 
-    # ── Resume or start fresh ──
-    script = None
-    needs_script, needs_images, needs_videos = True, True, True
-
+    # ── Pipeline state (seed or resume) ──
+    state_path = cfg.resolved_output / "pipeline_state.json"
+    state: PipelineState | None = None
     if args.resume:
-        script, needs_script, needs_images, needs_videos = _resume_from_script(
-            cfg, verbose=not args.quiet
-        )
+        state = PipelineState.load(state_path)
+
+    if state is not None:
+        ep = state.episode(1) if state.episodes else None
+        script = None
+        if ep and ep.has_script:
+            script = Script.load(ep.script_path) if Path(ep.script_path).exists() else None
+        needs_script = ep is None or ep.status == "pending"
+        needs_images = ep is None or not ep.all_images_done
+        needs_videos = ep is None or not ep.all_videos_done
+        if not args.quiet:
+            print(f"  Resuming from: {state_path}", file=sys.stderr)
+            print(state.summary(), file=sys.stderr)
+    else:
+        script = None
+        needs_script, needs_images, needs_videos = True, True, True
 
     step = 0
     total_steps = 4 - int(args.skip_images or (script is not None and not needs_images)) \
@@ -140,17 +153,31 @@ def cmd_create(args: argparse.Namespace) -> None:
             target_duration=args.duration,
             verbose=not args.quiet,
         )
-        # Optional review pause
         if not args.no_review:
             _review_script(script)
-    else:
-        if not args.quiet:
-            print(f"\n  ✓ Script loaded from disk, skipping.", file=sys.stderr)
+    elif not args.quiet:
+        print(f"\n  ✓ Script loaded from disk, skipping.", file=sys.stderr)
 
     script_path = _script_path(cfg)
     script.save(script_path)
     if not args.quiet and needs_script:
         print(f"  Script: {script_path}", file=sys.stderr)
+
+    # Persist state after script step
+    if state is None:
+        state = PipelineState.fresh(
+            project_name=args.topic[:60],
+            output_dir=str(cfg.resolved_output),
+            num_episodes=1,
+        )
+    ep = state.episode(1) or PipelineState.EpisodeState(episode_number=1)
+    ep.status = "script_ready"
+    ep.script_path = str(script_path)
+    ep.scenes = [
+        PipelineState.SceneState(scene_id=s.id) for s in script.scenes
+    ]
+    state.upsert_episode(ep)
+    state.save(state_path)
 
     # ── Step 2: Scene images ──
     do_images = not args.skip_images and needs_images
@@ -160,6 +187,14 @@ def cmd_create(args: argparse.Namespace) -> None:
             print(f"\n=== Step {step}/{total_steps}: Generating scene images ===", file=sys.stderr)
         script = generate_scene_images(script, cfg=cfg, verbose=not args.quiet)
         script.save(script_path)
+        # Update per-scene state
+        for s in script.scenes:
+            ss = next((x for x in ep.scenes if x.scene_id == s.id), None)
+            if ss is not None:
+                ss.image = "success" if s.is_image_ready else "failed"
+                ss.image_url = s.image_url or ""
+        ep.status = "images_ready" if ep.all_images_done else "failed"
+        state.save(state_path)
     elif args.resume and not needs_images and not args.quiet:
         print(f"\n  ✓ All scenes already have images, skipping.", file=sys.stderr)
 
@@ -177,6 +212,13 @@ def cmd_create(args: argparse.Namespace) -> None:
             verbose=not args.quiet,
         )
         script.save(script_path)
+        for s in script.scenes:
+            ss = next((x for x in ep.scenes if x.scene_id == s.id), None)
+            if ss is not None:
+                ss.video = "success" if s.is_video_ready else "failed"
+                ss.video_url = s.video_url or ""
+        ep.status = "videos_ready" if ep.all_videos_done else "failed"
+        state.save(state_path)
     elif args.resume and not needs_videos and not args.quiet:
         print(f"\n  ✓ All scenes already have videos, skipping.", file=sys.stderr)
 
@@ -191,6 +233,8 @@ def cmd_create(args: argparse.Namespace) -> None:
             output_name=args.output or "",
             verbose=not args.quiet,
         )
+        ep.status = "assembled"
+        state.save(state_path)
         if not args.quiet:
             print(f"\n✓ Final video: {output_path}", file=sys.stderr)
 
@@ -202,18 +246,29 @@ def cmd_ref_create(args: argparse.Namespace) -> None:
 
     cfg.ref_num_frames = args.ref_frames
 
-    # ── Resume or start fresh ──
-    script = None
-    needs_script, needs_images, needs_videos = True, True, True
-
+    state_path = cfg.resolved_output / "pipeline_state.json"
+    state: PipelineState | None = None
     if args.resume:
-        script, needs_script, needs_images, needs_videos = _resume_from_script(
-            cfg, verbose=not args.quiet
-        )
+        state = PipelineState.load(state_path)
+
+    if state is not None:
+        ep = state.episode(1) if state.episodes else None
+        script = None
+        if ep and ep.has_script:
+            script = Script.load(ep.script_path) if Path(ep.script_path).exists() else None
+        needs_script = ep is None or ep.status == "pending"
+        needs_images = ep is None or not ep.all_images_done
+        needs_videos = ep is None or not ep.all_videos_done
+        if not args.quiet:
+            print(f"  Resuming from: {state_path}", file=sys.stderr)
+            print(state.summary(), file=sys.stderr)
+    else:
+        script = None
+        needs_script, needs_images, needs_videos = True, True, True
 
     total_steps = (5 if needs_script else 4) \
-                     - int(args.skip_images or (script is not None and not needs_images)) \
-                     - int(args.skip_video or (script is not None and not needs_videos)) \
+                     - int(args.skip_images or not needs_images) \
+                     - int(args.skip_video or not needs_videos) \
                      - int(args.skip_assembly)
 
     step = 0
@@ -250,6 +305,20 @@ def cmd_ref_create(args: argparse.Namespace) -> None:
     if not args.quiet and needs_script:
         print(f"  Script: {script_path}", file=sys.stderr)
 
+    # Persist state after script step
+    if state is None:
+        state = PipelineState.fresh(
+            project_name=args.topic[:60],
+            output_dir=str(cfg.resolved_output),
+            num_episodes=1,
+        )
+    ep = state.episode(1) or PipelineState.EpisodeState(episode_number=1)
+    ep.status = "script_ready"
+    ep.script_path = str(script_path)
+    ep.scenes = [PipelineState.SceneState(scene_id=s.id) for s in script.scenes]
+    state.upsert_episode(ep)
+    state.save(state_path)
+
     # ── Step 2: Scene images ──
     do_images = not args.skip_images and needs_images
     if do_images:
@@ -258,6 +327,13 @@ def cmd_ref_create(args: argparse.Namespace) -> None:
             print(f"\n=== Step {step}/{total_steps}: Generating scene images ===", file=sys.stderr)
         script = generate_scene_images(script, cfg=cfg, verbose=not args.quiet)
         script.save(script_path)
+        for s in script.scenes:
+            ss = next((x for x in ep.scenes if x.scene_id == s.id), None)
+            if ss is not None:
+                ss.image = "success" if s.is_image_ready else "failed"
+                ss.image_url = s.image_url or ""
+        ep.status = "images_ready" if ep.all_images_done else "failed"
+        state.save(state_path)
     elif args.resume and not needs_images and not args.quiet:
         print(f"\n  ✓ All scenes already have images, skipping.", file=sys.stderr)
 
@@ -275,6 +351,13 @@ def cmd_ref_create(args: argparse.Namespace) -> None:
             verbose=not args.quiet,
         )
         script.save(script_path)
+        for s in script.scenes:
+            ss = next((x for x in ep.scenes if x.scene_id == s.id), None)
+            if ss is not None:
+                ss.video = "success" if s.is_video_ready else "failed"
+                ss.video_url = s.video_url or ""
+        ep.status = "videos_ready" if ep.all_videos_done else "failed"
+        state.save(state_path)
     elif args.resume and not needs_videos and not args.quiet:
         print(f"\n  ✓ All scenes already have videos, skipping.", file=sys.stderr)
 
@@ -289,6 +372,8 @@ def cmd_ref_create(args: argparse.Namespace) -> None:
             output_name=args.output or "",
             verbose=not args.quiet,
         )
+        ep.status = "assembled"
+        state.save(state_path)
         if not args.quiet:
             print(f"\n✓ Final video: {output_path}", file=sys.stderr)
 
@@ -298,7 +383,6 @@ def cmd_novel(args: argparse.Namespace) -> None:
     cfg = _build_cfg(args)
     _require_key(cfg)
 
-    # Read novel text
     novel_path = Path(args.file)
     if not novel_path.exists():
         raise SystemExit(f"Novel file not found: {args.file}")
@@ -307,30 +391,71 @@ def cmd_novel(args: argparse.Namespace) -> None:
     if not args.quiet:
         print(f"\nReading novel: {novel_path.name} ({len(text)} chars)", file=sys.stderr)
 
-    scripts = novel_to_episodes(text, cfg, max_episodes=args.episodes, verbose=not args.quiet)
+    # Resume check
+    state_path = cfg.resolved_output / "pipeline_state.json"
+    state = PipelineState.load(state_path)
+    resume_episode = 0
+    if state is not None:
+        for ep in state.episodes:
+            if ep.status in ("pending", "failed"):
+                resume_episode = ep.episode_number
+                break
+            resume_episode = ep.episode_number + 1
+        total_episodes = len(state.episodes)
+        if not args.quiet:
+            print(f"  Resuming from episode {resume_episode}", file=sys.stderr)
+    else:
+        state = PipelineState.fresh(
+            project_name=novel_path.stem,
+            output_dir=str(cfg.resolved_output),
+        )
+        total_episodes = args.episodes
 
-    # Save each episode
+    if state is None:
+        state = PipelineState.fresh(
+            project_name=novel_path.stem,
+            output_dir=str(cfg.resolved_output),
+            num_episodes=total_episodes,
+        )
+
+    scripts = novel_to_episodes(
+        text, cfg,
+        max_episodes=total_episodes,
+        resume_from=resume_episode,
+        verbose=not args.quiet,
+    )
+
     cfg.ensure_dirs()
     saved = []
-    for i, script in enumerate(scripts):
-        if args.episode:
-            # Only save the requested episode
-            ep_path = cfg.resolved_output / f"episode_{script.episode:02d}.json"
-            script.save(ep_path)
-            saved.append(str(ep_path))
-            if not args.quiet:
-                print(f"\n  Episode {script.episode} saved: {ep_path}", file=sys.stderr)
-            return
+    for script in scripts:
+        if args.episode and script.episode != args.episode:
+            continue
 
         ep_path = cfg.resolved_output / f"episode_{script.episode:02d}.json"
         script.save(ep_path)
         saved.append(str(ep_path))
 
+        # Update pipeline state
+        ep = state.episode(script.episode) or PipelineState.EpisodeState(
+            episode_number=script.episode,
+        )
+        ep.status = "script_ready"
+        ep.script_path = str(ep_path)
+        ep.scenes = [
+            PipelineState.SceneState(scene_id=s.id) for s in script.scenes
+        ]
+        state.upsert_episode(ep)
+
+        if not args.quiet:
+            print(f"\n  Episode {script.episode} saved: {ep_path}", file=sys.stderr)
+
+    state.save(state_path)
+
     if not args.quiet:
         print(f"\n✓ {len(saved)} episode script(s) saved to {cfg.resolved_output}/", file=sys.stderr)
         for p in saved:
             print(f"    {p}", file=sys.stderr)
-        print(f"\nNext: agnes-video scenes episodes/episode_01.json", file=sys.stderr)
+        print(f"\nNext: agnes-video project render --episode 1", file=sys.stderr)
 
 
 def cmd_status(args: argparse.Namespace) -> None:
@@ -611,34 +736,6 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 # ── Helpers ───────────────────────────────────────────────────────────
-
-
-def _resume_from_script(
-    cfg: AgnesConfig, *, verbose: bool
-) -> tuple[Script | None, bool, bool, bool]:
-    """Try to resume from an existing script in the output directory.
-
-    Returns (script, needs_script, needs_images, needs_videos).
-    All needs_* are True when starting fresh.
-    """
-    script_path = Path(_script_path(cfg))
-    if not script_path.exists():
-        return None, True, True, True
-
-    script = Script.load(script_path)
-    if not script.scenes:
-        if verbose:
-            print("  Found script but no scenes — re-generating.", file=sys.stderr)
-        return None, True, True, True
-
-    ready_images = sum(1 for s in script.scenes if s.is_image_ready)
-    ready_videos = sum(1 for s in script.scenes if s.is_video_ready)
-    total = len(script.scenes)
-    if verbose:
-        print(f"  Resuming from: {script_path}", file=sys.stderr)
-        print(f"    Scenes: {total} total, {ready_images}/{total} images, {ready_videos}/{total} videos", file=sys.stderr)
-
-    return script, False, ready_images < total, ready_videos < total
 
 
 def _build_cfg(args: argparse.Namespace) -> AgnesConfig:

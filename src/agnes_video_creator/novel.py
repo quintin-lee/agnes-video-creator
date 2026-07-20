@@ -339,15 +339,24 @@ def novel_to_episodes(
     cfg: AgnesConfig,
     *,
     max_episodes: int = 4,
+    resume_from: int = 0,
     verbose: bool = True,
 ) -> list[Script]:
     """Full pipeline: chunk novel, generate one script per chunk with
-    cross-episode continuity tracking."""
+    cross-episode continuity tracking.
+
+    Parameters
+    ----------
+    resume_from : int
+        Skip episodes before this number (1-based).  Used during resume
+        to avoid re-generating already-completed episode scripts.
+    """
     chunks = chunk_novel(text, verbose=verbose)
     if not chunks:
         raise SystemExit("Novel produced no chunks.")
 
     # Analyze the first chunk for overall story metadata
+    # (reuse cached analysis from previous run when resuming)
     first_chunk = chunks[0]
     title, characters, episodes, remaining = analyze_novel(
         first_chunk.text, cfg, verbose=verbose,
@@ -355,14 +364,17 @@ def novel_to_episodes(
 
     total = min(len(chunks), max_episodes)
     if verbose:
+        resume_msg = f" (resuming from episode {resume_from + 1})" if resume_from else ""
         print(f"\n  Generating {total} episode(s) from {len(chunks)} chunk(s) "
-              f"with continuity tracking.", file=sys.stderr)
+              f"with continuity tracking.{resume_msg}", file=sys.stderr)
 
-    # Initialize continuity state
     continuity = ContinuityState()
 
     scripts: list[Script] = []
     for i in range(total):
+        # Skip episodes before the resume point
+        if i + 1 < resume_from:
+            continue
         chunk = chunks[i]
         ep = episodes[i] if i < len(episodes) else {
             "number": i + 1,
