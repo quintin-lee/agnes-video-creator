@@ -135,7 +135,7 @@ a:hover{text-decoration:underline}
 
 .flex{display:flex}.gap-2{gap:8px}.items-center{align-items:center}
 .mt-2{margin-top:8px}.mb-2{margin-bottom:8px}
-.text-sm{font-size:.85em}.text-muted{color:var(--text3)}
+.text-sm{font-size:.85em}.text-xs{font-size:.75em}.text-muted{color:var(--text3)}
 .truncate{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .hidden{display:none!important}
 .pulse{animation:pulse 1.5s ease-in-out infinite}
@@ -237,10 +237,11 @@ const App = {
 
     const rows=jobs.map(j=>{
       const ep=j.episode_num?` EP${j.episode_num}`:"";
+      const err=j.error&&j.status==="failed"?`<div class="text-xs text-muted" style="max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${this.esc(j.error)}">${this.esc(j.error.slice(0,80))}</div>`:"";
       return `<tr>
         <td><code style="font-size:.8em">${this.esc(j.id)}</code></td>
         <td><span class="stat-badge ${this.bsc(j.status)}">${this.bsl(j.status)}</span></td>
-        <td>${this.esc(j.job_type)}${ep}</td>
+        <td>${this.esc(j.job_type)}${ep}${err}</td>
         <td>${this.esc(j.project||"—")}</td>
         <td class="text-muted text-sm">${(j.created_at||"").slice(0,19)}</td>
         <td>${j.status==="pending"||j.status==="running"?`<button class="btn btn-small btn-danger" onclick="App.cancelBatchJob('${this.esc(j.id)}')">Cancel</button>`:""}</td>
