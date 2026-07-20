@@ -146,6 +146,9 @@ class Script:
     output_dir: str = ""
     characters: list[Character] = field(default_factory=list)
     episode: int = 0  # episode number for novel-based workflows
+    visual_updates: dict[str, str] = field(default_factory=dict)
+    # Continuity updates reported by the LLM after generating this script:
+    # {"new_environment": "描述", "outfit:林黛玉": "新服装描述", "prop:尚方宝剑": "描述"}
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -159,6 +162,7 @@ class Script:
             "output_dir": self.output_dir,
             "characters": [asdict(c) for c in self.characters],
             "episode": self.episode,
+            "visual_updates": dict(self.visual_updates),
         }
 
     def save(self, path: str | Path) -> None:
