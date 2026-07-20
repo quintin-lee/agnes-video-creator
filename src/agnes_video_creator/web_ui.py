@@ -30,6 +30,7 @@ else:
     _HAS_FASTAPI = True
 
 from agnes_video_creator.config import AgnesConfig
+from agnes_video_creator.consistency import check_script_file
 from agnes_video_creator.models import Character, Script
 from agnes_video_creator.project import Project, EpisodeInfo, find_project
 
@@ -500,6 +501,141 @@ def create_app() -> FastAPI:
         if not img_path.exists() or not img_path.is_file():
             raise HTTPException(404, "Image not found")
         return FileResponse(str(img_path))
+
+    # ── API: Serve scene videos ─────────────────────────────────────
+
+    @app.get("/api/projects/{name}/videos/{episode_num:path}")
+    def get_scene_video(name: str, episode_num: str, file: str = Query(...)):
+        """Serve a scene video file."""
+        root = _projects_dir() / name
+        vid_path = root / episode_num / "videos" / file
+        if not vid_path.exists():
+            vid_path = root / file
+        if not vid_path.exists() or not vid_path.is_file():
+            raise HTTPException(404, "Video not found")
+        return FileResponse(str(vid_path), media_type="video/mp4")
+
+    # ── API: Script edit (scene-level) ──────────────────────────────
+
+    @app.put("/api/projects/{name}/episodes/{num}/scene/{scene_id}")
+    async def update_scene(name: str, num: int, scene_id: int, request: Request):
+        """Update a scene's narration, visual_prompt, or duration."""
+        root = _projects_dir() / name
+        proj_file = root / "project.json"
+        if not proj_file.exists():
+            raise HTTPException(404, f"Project '{name}' not found")
+
+        project = Project.load(proj_file)
+        ep_info: EpisodeInfo | None = None
+        for ep in project.episodes:
+            if ep.number == num:
+                ep_info = ep
+                break
+        if not ep_info or not ep_info.script_path or not Path(ep_info.script_path).exists():
+            raise HTTPException(404, f"Episode {num} script not found")
+
+        script = Script.load(ep_info.script_path)
+        scene = next((s for s in script.scenes if s.id == scene_id), None)
+        if not scene:
+            raise HTTPException(404, f"Scene {scene_id} not found")
+
+        try:
+            body = await request.json()
+        except Exception:
+            raise HTTPException(422, "Invalid JSON body")
+
+        changed = False
+        for field in ("narration", "visual_prompt", "duration_seconds", "camera", "style"):
+            if field in body:
+                setattr(scene, field, body[field])
+                changed = True
+
+        # Also allow editing dialogue lines
+        if "dialogues" in body and isinstance(body["dialogues"], list):
+            scene.dialogues = body["dialogues"]
+            changed = True
+
+        if not changed:
+            raise HTTPException(400, "No editable fields provided")
+
+        script.save()
+        project.mark_updated()
+        project.save()
+
+        return {"status": "ok", "scene_id": scene_id}
+
+    # ── API: Voice-map assignment ───────────────────────────────────
+
+    @app.put("/api/projects/{name}/voice-map")
+    async def update_voice_map(name: str, request: Request):
+        """Update voice assignments for project characters."""
+        root = _projects_dir() / name
+        proj_file = root / "project.json"
+        if not proj_file.exists():
+            raise HTTPException(404, f"Project '{name}' not found")
+
+        project = Project.load(proj_file)
+        try:
+            body = await request.json()
+        except Exception:
+            raise HTTPException(422, "Invalid JSON body")
+
+        voice_map: dict[str, str] = body.get("voice_map", {})
+        if not isinstance(voice_map, dict) or not voice_map:
+            raise HTTPException(400, "'voice_map' must be a non-empty dict")
+
+        # Update character voice settings via project
+        chars = project.get_characters()
+        updated = 0
+        for c in chars:
+            if c.name in voice_map:
+                c.voice = voice_map[c.name]
+                updated += 1
+
+        if updated == 0:
+            raise HTTPException(400, "No matching characters found for voice_map keys")
+
+        project.save()
+        return {"status": "ok", "updated": updated}
+
+    # ── API: Consistency check ──────────────────────────────────────
+
+    @app.get("/api/projects/{name}/check/{num}")
+    def check_episode(name: str, num: int):
+        """Run consistency check on an episode script."""
+        root = _projects_dir() / name
+        proj_file = root / "project.json"
+        if not proj_file.exists():
+            raise HTTPException(404, f"Project '{name}' not found")
+
+        project = Project.load(proj_file)
+        ep_info: EpisodeInfo | None = None
+        for ep in project.episodes:
+            if ep.number == num:
+                ep_info = ep
+                break
+        if not ep_info or not ep_info.script_path or not Path(ep_info.script_path).exists():
+            raise HTTPException(404, f"Episode {num} script not found")
+
+        cfg = AgnesConfig()
+        report = check_script_file(ep_info.script_path, cfg=cfg, verbose=False)
+
+        return {
+            "episode": num,
+            "critical": report.critical_count,
+            "warnings": report.warning_count,
+            "issues": [
+                {
+                    "severity": i.severity,
+                    "category": i.category,
+                    "description": i.description,
+                    "location": i.location,
+                    "suggestion": i.suggestion,
+                }
+                for i in report.issues
+            ],
+            "summary": report.summary,
+        }
 
     # ── API: Log streaming (SSE) ────────────────────────────────────
 
