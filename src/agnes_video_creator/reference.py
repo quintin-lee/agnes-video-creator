@@ -14,7 +14,6 @@ from __future__ import annotations
 import base64
 import json
 import os
-import re
 import subprocess
 import sys
 import urllib.request
@@ -24,7 +23,6 @@ from typing import Any
 from agnes_video_creator.config import AgnesConfig
 from agnes_video_creator.models import Script
 from agnes_video_creator.utils import request_json
-
 
 # ── Data model ─────────────────────────────────────────────────────────
 
@@ -40,12 +38,8 @@ class StyleProfile:
         self.composition: str = raw.get("composition", "rule of thirds")
         self.mood: str = raw.get("mood", "neutral")
         self.scene_type: str = raw.get("scene_type", "general")
-        self.motion_character: str = raw.get(
-            "motion_character", "gentle, slow-paced"
-        )
-        self.key_visual_elements: str = raw.get(
-            "key_visual_elements", ""
-        )
+        self.motion_character: str = raw.get("motion_character", "gentle, slow-paced")
+        self.key_visual_elements: str = raw.get("key_visual_elements", "")
         self.raw = raw
 
     def to_dict(self) -> dict[str, str]:
@@ -106,7 +100,7 @@ def _resolve_video_source(src: str, temp_dir: Path, *, verbose: bool = True) -> 
 
     # ── URL download ─────────────────────────────────────────────
     if verbose:
-        print(f"  Downloading reference video from URL...", file=sys.stderr)
+        print("  Downloading reference video from URL...", file=sys.stderr)
 
     # Determine filename from URL or fallback
     url_path = urllib.request.urlparse(src).path
@@ -121,6 +115,7 @@ def _resolve_video_source(src: str, temp_dir: Path, *, verbose: bool = True) -> 
         return str(dest)
 
     try:
+
         def _report(block_count: int, block_size: int, total_size: int) -> None:
             if verbose and total_size > 0:
                 downloaded = block_count * block_size / (1024 * 1024)
@@ -189,11 +184,16 @@ def extract_frames(
         cmd = [
             "ffmpeg",
             "-y",
-            "-ss", str(ts),
-            "-i", str(video),
-            "-vframes", "1",
-            "-vf", f"scale={size}",
-            "-q:v", "3",  # high-quality JPEG
+            "-ss",
+            str(ts),
+            "-i",
+            str(video),
+            "-vframes",
+            "1",
+            "-vf",
+            f"scale={size}",
+            "-q:v",
+            "3",  # high-quality JPEG
             str(out_path),
         ]
         try:
@@ -204,9 +204,7 @@ def extract_frames(
                 text=True,
             )
         except subprocess.CalledProcessError as exc:
-            raise SystemExit(
-                f"ffmpeg frame extraction failed at {ts}s: {exc.stderr}"
-            ) from exc
+            raise SystemExit(f"ffmpeg frame extraction failed at {ts}s: {exc.stderr}") from exc
 
         extracted.append(out_path)
 
@@ -217,9 +215,12 @@ def _get_duration(video: Path) -> float:
     """Get video duration in seconds via ffprobe."""
     cmd = [
         "ffprobe",
-        "-v", "error",
-        "-show_entries", "format=duration",
-        "-of", "default=noprint_wrappers=1:nokey=1",
+        "-v",
+        "error",
+        "-show_entries",
+        "format=duration",
+        "-of",
+        "default=noprint_wrappers=1:nokey=1",
         str(video),
     ]
     try:
@@ -239,7 +240,7 @@ def encode_frame(image_path: Path) -> str:
 # ── Style analysis via vision API ──────────────────────────────────────
 
 
-_ANALYSIS_SYSTEM_PROMPT = """You are a professional video director and cinematographer. 
+_ANALYSIS_SYSTEM_PROMPT = """You are a professional video director and cinematographer.
 Analyze the provided video frame(s) and extract the visual style.
 
 Output **only** valid JSON — no markdown fences, no commentary:
@@ -311,9 +312,7 @@ def analyze_frame_style(
     try:
         raw_content = data["choices"][0]["message"]["content"]
     except (KeyError, IndexError, TypeError) as exc:
-        raise SystemExit(
-            f"Style analysis failed: {json.dumps(data, ensure_ascii=False)}"
-        ) from exc
+        raise SystemExit(f"Style analysis failed: {json.dumps(data, ensure_ascii=False)}") from exc
 
     if not raw_content:
         raise SystemExit(
@@ -539,9 +538,7 @@ def analyze_reference_video(
 
     # Save profile to output dir for inspection
     profile_path = cfg.resolved_output / "reference_style.json"
-    profile_path.write_text(
-        json.dumps(profile.to_dict(), ensure_ascii=False, indent=2)
-    )
+    profile_path.write_text(json.dumps(profile.to_dict(), ensure_ascii=False, indent=2))
     if verbose:
         print(f"  Style profile saved to: {profile_path}", file=sys.stderr)
 

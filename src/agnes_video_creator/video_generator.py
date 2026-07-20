@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Any
 
 from agnes_video_creator.config import AgnesConfig
-from agnes_video_creator.models import Character, Script
+from agnes_video_creator.models import Script
 from agnes_video_creator.utils import (
     download_file,
     poll_video_task,
@@ -100,7 +100,7 @@ def _render_scenes(
     scene_ids: set[int] | None = None,
     verbose: bool = True,
 ) -> None:
-    for i, scene in enumerate(script.scenes):
+    for _i, scene in enumerate(script.scenes):
         if scene_ids is not None and scene.id not in scene_ids:
             continue
         if scene.is_video_ready:
@@ -112,15 +112,17 @@ def _render_scenes(
             continue
 
         if verbose:
-            src = "image-to-video" if scene.is_image_ready and mode == "image-to-video" else "text-to-video"
+            src = (
+                "image-to-video"
+                if scene.is_image_ready and mode == "image-to-video"
+                else "text-to-video"
+            )
             print(
                 f"  Scene {scene.id}/{len(script.scenes)}: generating video ({src})...",
                 file=sys.stderr,
             )
 
-        enriched = _inject_face_features(
-            scene.visual_prompt, scene.character_appearances, script
-        )
+        enriched = _inject_face_features(scene.visual_prompt, scene.character_appearances, script)
         final_prompt, orig = prepare_prompt(enriched, cfg)
 
         # Use per-character seed for face consistency
@@ -158,15 +160,17 @@ def _render_scenes(
             msg = str(exc).split("\n")[0][:300] if str(exc) else str(exc)
             print(f"    ✗ Failed: {msg}", file=sys.stderr)
             clean = final_prompt[:400].replace("\n", " ")
-            print(f"      Prompt: {clean}…" if len(final_prompt) > 400 else f"      Prompt: {clean}", file=sys.stderr)
+            print(
+                f"      Prompt: {clean}…" if len(final_prompt) > 400 else f"      Prompt: {clean}",
+                file=sys.stderr,
+            )
             print(f"      Skipping scene {scene.id}.", file=sys.stderr)
             continue
 
         task_id = str(created.get("id") or created.get("task_id", ""))
         if not task_id:
             print(
-                f"    ✗ Scene {scene.id}: create response missing id — "
-                f"{json.dumps(created)[:200]}",
+                f"    ✗ Scene {scene.id}: create response missing id — {json.dumps(created)[:200]}",
                 file=sys.stderr,
             )
             print(f"      Skipping scene {scene.id}.", file=sys.stderr)
@@ -293,17 +297,22 @@ def _render_keyframes(
         except (SystemExit, Exception) as exc:
             msg = str(exc).split("\n")[0][:300] if str(exc) else str(exc)
             print(f"    ✗ Failed: {msg}", file=sys.stderr)
-            print(f"      Skipping keyframe {i + 1} (scene {scene_a.id} → {scene_b.id}).", file=sys.stderr)
+            print(
+                f"      Skipping keyframe {i + 1} (scene {scene_a.id} → {scene_b.id}).",
+                file=sys.stderr,
+            )
             continue
 
         task_id = str(created.get("id") or created.get("task_id", ""))
         if not task_id:
             print(
-                f"    ✗ Keyframe {i + 1}: create response missing id — "
-                f"{json.dumps(created)[:200]}",
+                f"    ✗ Keyframe {i + 1}: create response missing id — {json.dumps(created)[:200]}",
                 file=sys.stderr,
             )
-            print(f"      Skipping keyframe {i + 1} (scene {scene_a.id} → {scene_b.id}).", file=sys.stderr)
+            print(
+                f"      Skipping keyframe {i + 1} (scene {scene_a.id} → {scene_b.id}).",
+                file=sys.stderr,
+            )
             continue
 
         if verbose:
@@ -320,7 +329,10 @@ def _render_keyframes(
                 f"{json.dumps(data, ensure_ascii=False)[:200]}",
                 file=sys.stderr,
             )
-            print(f"      Skipping keyframe {i + 1} (scene {scene_a.id} → {scene_b.id}).", file=sys.stderr)
+            print(
+                f"      Skipping keyframe {i + 1} (scene {scene_a.id} → {scene_b.id}).",
+                file=sys.stderr,
+            )
             continue
 
         # Store on scene_b (the transition result)

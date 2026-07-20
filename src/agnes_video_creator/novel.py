@@ -24,7 +24,6 @@ from agnes_video_creator.models import Character, Script
 from agnes_video_creator.script_generator import generate_script
 from agnes_video_creator.utils import request_json
 
-
 # ── Novel chunking ─────────────────────────────────────────────────────
 
 
@@ -68,7 +67,7 @@ def chunk_novel(
     merged: list[NovelChunk] = []
     buf = ""
     buf_idx = 0
-    for i, (heading, body) in enumerate(raw_chunks):
+    for _i, (heading, body) in enumerate(raw_chunks):
         segment = f"{heading}\n\n{body}" if heading else body
         if buf and len(buf) + len(segment) > max_chunk_len:
             merged.append(NovelChunk(index=buf_idx, text=buf))
@@ -103,8 +102,9 @@ def chunk_novel(
             file=sys.stderr,
         )
         for c in merged:
-            print(f"    [{c.index}] {c.title or '(untitled)'}: {len(c.text):,} chars",
-                  file=sys.stderr)
+            print(
+                f"    [{c.index}] {c.title or '(untitled)'}: {len(c.text):,} chars", file=sys.stderr
+            )
 
     return merged
 
@@ -117,7 +117,7 @@ def _split_by_chapters(text: str) -> list[tuple[str, str]]:
 
     chunks: list[tuple[str, str]] = []
     for i, m in enumerate(matches):
-        start = m.start()
+        m.start()
         heading = m.group().strip()
         end = matches[i + 1].start() if i + 1 < len(matches) else len(text)
         body = text[m.end() : end].strip()
@@ -154,15 +154,15 @@ _DIALOGUE_VERBS = (
 
 # Pattern 1: 「A笑道：」"dialogue" — character name + speech verb + colon + quoted text
 _DIALOGUE_RE = re.compile(
-    rf'([\u4e00-\u9fff]{{2,4}}?)'
-    rf'(?:{_DIALOGUE_VERBS})'
+    rf"([\u4e00-\u9fff]{{2,4}}?)"
+    rf"(?:{_DIALOGUE_VERBS})"
     rf'[：:][\u201c"]([^\u201c"\u201d]+)[\u201d"]'
 )
 # Pattern 2: 「dialogue」A笑道。 (angle-quoted speech followed by speaker + verb)
 _ANGLE_DIALOGUE_RE = re.compile(
-    rf'\u300c([^\u300d]+)\u300d'
-    rf'([\u4e00-\u9fff]{{2,4}}?)'
-    rf'(?:{_DIALOGUE_VERBS})'
+    rf"\u300c([^\u300d]+)\u300d"
+    rf"([\u4e00-\u9fff]{{2,4}}?)"
+    rf"(?:{_DIALOGUE_VERBS})"
 )
 
 
@@ -261,8 +261,11 @@ def analyze_novel(
         print(f"\n  Story: {title}", file=sys.stderr)
         print(f"  Characters ({len(chars)}): {', '.join(c.name for c in chars)}", file=sys.stderr)
         for ep in episodes:
-            print(f"    Episode {ep['number']}: {ep.get('title', '')} "
-                  f"({ep.get('scene_count', '?')} scenes)", file=sys.stderr)
+            print(
+                f"    Episode {ep['number']}: {ep.get('title', '')} "
+                f"({ep.get('scene_count', '?')} scenes)",
+                file=sys.stderr,
+            )
         if remaining:
             print(f"  Remaining text: {len(remaining)} chars", file=sys.stderr)
 
@@ -286,8 +289,7 @@ def generate_episode_script(
 ) -> Script:
     """Generate a full Script for one episode using the existing pipeline."""
     char_info = "\n".join(
-        f"- {c.name}: {c.appearance or '(no description)'} ({c.role})"
-        for c in characters
+        f"- {c.name}: {c.appearance or '(no description)'} ({c.role})" for c in characters
     )
 
     # Use generate_script with character_info for consistency
@@ -359,14 +361,19 @@ def novel_to_episodes(
     # (reuse cached analysis from previous run when resuming)
     first_chunk = chunks[0]
     title, characters, episodes, remaining = analyze_novel(
-        first_chunk.text, cfg, verbose=verbose,
+        first_chunk.text,
+        cfg,
+        verbose=verbose,
     )
 
     total = min(len(chunks), max_episodes)
     if verbose:
         resume_msg = f" (resuming from episode {resume_from + 1})" if resume_from else ""
-        print(f"\n  Generating {total} episode(s) from {len(chunks)} chunk(s) "
-              f"with continuity tracking.{resume_msg}", file=sys.stderr)
+        print(
+            f"\n  Generating {total} episode(s) from {len(chunks)} chunk(s) "
+            f"with continuity tracking.{resume_msg}",
+            file=sys.stderr,
+        )
 
     continuity = ContinuityState()
 
@@ -376,16 +383,19 @@ def novel_to_episodes(
         if i + 1 < resume_from:
             continue
         chunk = chunks[i]
-        ep = episodes[i] if i < len(episodes) else {
-            "number": i + 1,
-            "title": f"第{i+1}集",
-            "summary": chunk.summary,
-            "character_focus": [c.name for c in characters],
-        }
+        ep = (
+            episodes[i]
+            if i < len(episodes)
+            else {
+                "number": i + 1,
+                "title": f"第{i + 1}集",
+                "summary": chunk.summary,
+                "character_focus": [c.name for c in characters],
+            }
+        )
 
         if verbose:
-            print(f"\n--- Episode {i+1}: {ep.get('title', '')} ---",
-                  file=sys.stderr)
+            print(f"\n--- Episode {i + 1}: {ep.get('title', '')} ---", file=sys.stderr)
 
         script = generate_episode_script(
             title,
@@ -423,7 +433,7 @@ def _parse_json(raw: str) -> dict[str, Any]:
     if cleaned.startswith("```"):
         first_nl = cleaned.find("\n")
         if first_nl != -1:
-            cleaned = cleaned[first_nl + 1:]
+            cleaned = cleaned[first_nl + 1 :]
         if cleaned.endswith("```"):
             cleaned = cleaned[:-3].strip()
         elif "```" in cleaned:
@@ -434,5 +444,5 @@ def _parse_json(raw: str) -> dict[str, Any]:
         start = cleaned.find("{")
         end = cleaned.rfind("}")
         if start != -1 and end > start:
-            return json.loads(cleaned[start: end + 1])
+            return json.loads(cleaned[start : end + 1])
         raise

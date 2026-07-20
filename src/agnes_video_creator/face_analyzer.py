@@ -15,7 +15,6 @@ from typing import Any
 from agnes_video_creator.config import AgnesConfig
 from agnes_video_creator.models import FaceFeatures
 
-
 # ── Vision-based analysis prompt ────────────────────────────────────────
 
 _ANALYSIS_SYSTEM_PROMPT = """You are a forensic face analyst.  Given a portrait photo,
@@ -78,6 +77,7 @@ def analyze_face(
     """
     if verbose:
         from pathlib import Path
+
         # Show a short name instead of a huge URL
         label = Path(image_url).name if "://" in image_url else image_url[:60]
         print(f"  Analyzing face: {label}", file=sys.stderr)
@@ -85,10 +85,7 @@ def analyze_face(
     content: list[dict[str, Any]] = [
         {
             "type": "text",
-            "text": (
-                "Analyze the face in this portrait. "
-                "Extract every facial feature precisely."
-            ),
+            "text": ("Analyze the face in this portrait. Extract every facial feature precisely."),
         },
         {
             "type": "image_url",
@@ -163,7 +160,7 @@ def _parse_features(raw: str) -> FaceFeatures | None:
     if cleaned.startswith("```"):
         first_nl = cleaned.find("\n")
         if first_nl != -1:
-            cleaned = cleaned[first_nl + 1:]
+            cleaned = cleaned[first_nl + 1 :]
         if cleaned.endswith("```"):
             cleaned = cleaned[:-3].strip()
         elif "```" in cleaned:
@@ -176,7 +173,7 @@ def _parse_features(raw: str) -> FaceFeatures | None:
         brace_end = cleaned.rfind("}")
         if brace_start != -1 and brace_end > brace_start:
             try:
-                data = json.loads(cleaned[brace_start: brace_end + 1])
+                data = json.loads(cleaned[brace_start : brace_end + 1])
             except json.JSONDecodeError:
                 return None
         else:
@@ -228,4 +225,5 @@ def request_json(
 ) -> dict[str, Any]:
     """Re-exported from utils to avoid circular imports."""
     from agnes_video_creator.utils import request_json as _rj  # noqa: PLC0415
+
     return _rj(method, path, payload, cfg, timeout=timeout)

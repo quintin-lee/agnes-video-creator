@@ -147,25 +147,25 @@ class ContinuityState:
             if key == "summary":
                 self.prev_summary = value
             elif key.startswith("environment:"):
-                self.visual.environments[key[len("environment:"):]] = value
+                self.visual.environments[key[len("environment:") :]] = value
             elif key.startswith("env:"):
-                self.visual.environments[key[len("env:"):]] = value
+                self.visual.environments[key[len("env:") :]] = value
             elif key.startswith("outfit:"):
-                self.visual.outfits[key[len("outfit:"):]] = value
+                self.visual.outfits[key[len("outfit:") :]] = value
             elif key.startswith("prop:"):
-                self.visual.props[key[len("prop:"):]] = value
+                self.visual.props[key[len("prop:") :]] = value
             elif key.startswith("plot:"):
-                thread = key[len("plot:"):]
+                thread = key[len("plot:") :]
                 if value and thread not in self.plot_threads:
                     self.plot_threads.append(f"{thread}: {value}")
             elif key.startswith("emotion:"):
-                char_name = key[len("emotion:"):]
+                char_name = key[len("emotion:") :]
                 self.ensure_character(char_name).emotional_state = value
             elif key.startswith("location:"):
-                char_name = key[len("location:"):]
+                char_name = key[len("location:") :]
                 self.ensure_character(char_name).location = value
             elif key.startswith("notes:"):
-                char_name = key[len("notes:"):]
+                char_name = key[len("notes:") :]
                 self.ensure_character(char_name).notes = value
             elif ":" in key:
                 prefix, rest = key.split(":", 1)

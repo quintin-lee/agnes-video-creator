@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from agnes_video_creator.cost_estimator import CostEstimate, estimate_episode, estimate_project
 
 
@@ -112,7 +114,3 @@ class TestEstimateProject:
         assert est.images == 0
         assert est.video_clips == 0
         assert est.text_calls == 1
-
-
-# pytest.approx requires importing pytest
-import pytest  # noqa: E402 (must be after usage in class bodies)

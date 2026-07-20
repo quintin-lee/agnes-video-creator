@@ -11,12 +11,9 @@ from __future__ import annotations
 import asyncio
 import json
 import os
-import queue
-import shutil
 import sys
 import threading
-import time
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 from pathlib import Path
 from typing import Any
 
@@ -29,12 +26,11 @@ except ImportError:
 else:
     _HAS_FASTAPI = True
 
-from agnes_video_creator.batch import get_queue, get_worker, BatchJob
+from agnes_video_creator.batch import get_queue, get_worker
 from agnes_video_creator.config import AgnesConfig
 from agnes_video_creator.consistency import check_script_file
-from agnes_video_creator.models import Character, Script
-from agnes_video_creator.project import Project, EpisodeInfo, find_project
-
+from agnes_video_creator.models import Script
+from agnes_video_creator.project import EpisodeInfo, Project
 
 # ── Helpers ─────────────────────────────────────────────────────────────
 
@@ -67,15 +63,17 @@ def _discover_projects() -> list[dict[str, Any]]:
             for ep in episodes:
                 s = ep.get("status", "pending")
                 status_counts[s] = status_counts.get(s, 0) + 1
-            results.append({
-                "name": data.get("name", entry.name),
-                "root": str(entry.resolve()),
-                "novel_path": data.get("novel_path", ""),
-                "episode_count": len(episodes),
-                "status_summary": status_counts,
-                "created_at": data.get("created_at", ""),
-                "updated_at": data.get("updated_at", ""),
-            })
+            results.append(
+                {
+                    "name": data.get("name", entry.name),
+                    "root": str(entry.resolve()),
+                    "novel_path": data.get("novel_path", ""),
+                    "episode_count": len(episodes),
+                    "status_summary": status_counts,
+                    "created_at": data.get("created_at", ""),
+                    "updated_at": data.get("updated_at", ""),
+                }
+            )
         except (json.JSONDecodeError, OSError):
             continue
     return results
@@ -84,8 +82,7 @@ def _discover_projects() -> list[dict[str, Any]]:
 def _check_installed() -> None:
     if not _HAS_FASTAPI:
         raise SystemExit(
-            "fastapi and uvicorn are required for the web UI.\n"
-            "Install: pip install fastapi uvicorn"
+            "fastapi and uvicorn are required for the web UI.\nInstall: pip install fastapi uvicorn"
         )
 
 
@@ -106,7 +103,7 @@ class PipelineLog:
         with self._lock:
             self._lines.append(text)
             if len(self._lines) > self._max:
-                self._lines = self._lines[-self._max:]
+                self._lines = self._lines[-self._max :]
             self._event.set()
 
     def read_since(self, cursor: int) -> tuple[list[str], int]:
@@ -305,10 +302,8 @@ def create_app() -> FastAPI:
             is_running = name in _running and _running[name].is_alive()
 
         chars = []
-        try:
+        with suppress(Exception):
             chars = project.get_characters()
-        except Exception:
-            pass
 
         return {
             "name": project.name,
@@ -325,8 +320,13 @@ def create_app() -> FastAPI:
             "updated_at": project.updated_at,
             "is_running": is_running,
             "characters": [
-                {"name": c.name, "role": c.role, "appearance": c.appearance or "",
-                 "voice": c.voice or "", "portrait_path": c.portrait_path or ""}
+                {
+                    "name": c.name,
+                    "role": c.role,
+                    "appearance": c.appearance or "",
+                    "voice": c.voice or "",
+                    "portrait_path": c.portrait_path or "",
+                }
                 for c in chars
             ],
             "episodes": [
@@ -426,7 +426,9 @@ def create_app() -> FastAPI:
 
         aspect = str(body.get("aspect", "9:16"))
         if aspect not in ("16:9", "9:16", "1:1", "4:3", "21:9"):
-            raise HTTPException(400, f"Unsupported aspect '{aspect}'. Use 16:9, 9:16, 1:1, 4:3, or 21:9.")
+            raise HTTPException(
+                400, f"Unsupported aspect '{aspect}'. Use 16:9, 9:16, 1:1, 4:3, or 21:9."
+            )
 
         src = Path(ep_info.output_path)
         dst = root / f"{src.stem}_{aspect.replace(':', 'x')}.mp4"
@@ -480,8 +482,9 @@ def create_app() -> FastAPI:
                 script = Script.load(ep.script_path)
                 total_scenes += len(script.scenes)
 
-        est = estimate_project(total_scenes, episodes=episode_count,
-                               include_images=True, include_video=True)
+        est = estimate_project(
+            total_scenes, episodes=episode_count, include_images=True, include_video=True
+        )
         return {
             "project": name,
             "episode_count": episode_count,
@@ -526,22 +529,24 @@ def create_app() -> FastAPI:
                             vid_rel = str(Path(s.video_path).relative_to(root))
                         except ValueError:
                             vid_rel = s.video_path
-                    scenes_data.append({
-                        "id": s.id,
-                        "narration": s.narration,
-                        "visual_prompt": s.visual_prompt,
-                        "duration_seconds": s.duration_seconds,
-                        "camera": s.camera,
-                        "style": s.style,
-                        "character_appearances": s.character_appearances,
-                        "dialogues": s.dialogues,
-                        "is_image_ready": s.is_image_ready,
-                        "is_video_ready": s.is_video_ready,
-                        "image_path": s.image_path or "",
-                        "image_rel": img_rel,
-                        "video_path": s.video_path or "",
-                        "video_rel": vid_rel,
-                    })
+                    scenes_data.append(
+                        {
+                            "id": s.id,
+                            "narration": s.narration,
+                            "visual_prompt": s.visual_prompt,
+                            "duration_seconds": s.duration_seconds,
+                            "camera": s.camera,
+                            "style": s.style,
+                            "character_appearances": s.character_appearances,
+                            "dialogues": s.dialogues,
+                            "is_image_ready": s.is_image_ready,
+                            "is_video_ready": s.is_video_ready,
+                            "image_path": s.image_path or "",
+                            "image_rel": img_rel,
+                            "video_path": s.video_path or "",
+                            "video_rel": vid_rel,
+                        }
+                    )
             except Exception as e:
                 raise HTTPException(500, f"Failed to load script: {e}")
 
@@ -565,7 +570,9 @@ def create_app() -> FastAPI:
                 "total_duration": script.total_duration if script else 0,
                 "style_guide": script.style_guide if script else "",
                 "scenes": scenes_data,
-            } if script else None,
+            }
+            if script
+            else None,
         }
 
     # ── API: Storyboard HTML ────────────────────────────────────────
@@ -590,6 +597,7 @@ def create_app() -> FastAPI:
                 raise HTTPException(404, "Episode script not found")
             script = Script.load(ep_info.script_path)
             from agnes_video_creator.storyboard import generate_storyboard_html
+
             storyboard_path = generate_storyboard_html(script, storyboard_path)
 
         return FileResponse(str(storyboard_path), media_type="text/html")
@@ -790,8 +798,15 @@ def create_app() -> FastAPI:
             u = update_map.get(c.name)
             if not u:
                 continue
-            for field in ("role", "voice", "appearance", "personality", "age",
-                          "sample_dialogue", "backstory"):
+            for field in (
+                "role",
+                "voice",
+                "appearance",
+                "personality",
+                "age",
+                "sample_dialogue",
+                "backstory",
+            ):
                 if field in u:
                     setattr(c, field, u[field])
             updated += 1
@@ -821,8 +836,9 @@ def create_app() -> FastAPI:
 
         cfg = AgnesConfig()
         if not cfg.has_api_key:
-            raise HTTPException(400,
-                "AGNES_API_KEY not set. Set the environment variable or pass --api-key.")
+            raise HTTPException(
+                400, "AGNES_API_KEY not set. Set the environment variable or pass --api-key."
+            )
 
         report = check_script_file(ep_info.script_path, cfg=cfg, verbose=False)
 
@@ -860,8 +876,9 @@ def create_app() -> FastAPI:
 
         cfg = AgnesConfig()
         if not cfg.has_api_key:
-            raise HTTPException(400,
-                "AGNES_API_KEY not set. Set the environment variable or pass --api-key.")
+            raise HTTPException(
+                400, "AGNES_API_KEY not set. Set the environment variable or pass --api-key."
+            )
 
         for ep in project.episodes:
             if not ep.script_path or not Path(ep.script_path).exists():
@@ -869,22 +886,24 @@ def create_app() -> FastAPI:
             report = check_script_file([ep.script_path], cfg=cfg, verbose=False)
             total_critical += report.critical_count
             total_warnings += report.warning_count
-            results.append({
-                "episode": ep.number,
-                "critical": report.critical_count,
-                "warnings": report.warning_count,
-                "issues": [
-                    {
-                        "severity": i.severity,
-                        "category": i.category,
-                        "description": i.description,
-                        "location": i.location,
-                        "suggestion": i.suggestion,
-                    }
-                    for i in report.issues
-                ],
-                "summary": report.summary,
-            })
+            results.append(
+                {
+                    "episode": ep.number,
+                    "critical": report.critical_count,
+                    "warnings": report.warning_count,
+                    "issues": [
+                        {
+                            "severity": i.severity,
+                            "category": i.category,
+                            "description": i.description,
+                            "location": i.location,
+                            "suggestion": i.suggestion,
+                        }
+                        for i in report.issues
+                    ],
+                    "summary": report.summary,
+                }
+            )
 
         return {
             "project": name,
@@ -992,7 +1011,9 @@ def create_app() -> FastAPI:
             raise HTTPException(404)
         idx = _STATIC / "index.html"
         if not idx.exists():
-            return HTMLResponse("<h1>Web UI not built</h1><p>Run the tool to generate the UI.</p>", status_code=200)
+            return HTMLResponse(
+                "<h1>Web UI not built</h1><p>Run the tool to generate the UI.</p>", status_code=200
+            )
         return HTMLResponse(idx.read_text(encoding="utf-8"))
 
     return app
@@ -1007,9 +1028,9 @@ def run_server(host: str = "127.0.0.1", port: int = 8765) -> None:
     import uvicorn
 
     app = create_app()
-    print(f"\n  🌐 Agnes Video Creator Web UI", file=sys.stderr)
-    print(f"  ─────────────────────────────", file=sys.stderr)
+    print("\n  🌐 Agnes Video Creator Web UI", file=sys.stderr)
+    print("  ─────────────────────────────", file=sys.stderr)
     print(f"  URL:  http://{host}:{port}", file=sys.stderr)
-    print(f"  Quit: Ctrl+C", file=sys.stderr)
+    print("  Quit: Ctrl+C", file=sys.stderr)
     print(file=sys.stderr)
     uvicorn.run(app, host=host, port=port, log_level="warning")

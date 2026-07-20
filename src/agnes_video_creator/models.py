@@ -44,27 +44,26 @@ class FaceFeatures:
         """
         parts = []
         face_desc = ", ".join(
-            filter(None, [
-                self.face_shape,
-                f"{self.eye_shape} eyes {self.eye_color}" if self.eye_shape else "",
-                f"{self.eyebrow} eyebrows" if self.eyebrow else "",
-                f"{self.nose} nose" if self.nose else "",
-                f"{self.mouth_lips} lips" if self.mouth_lips else "",
-                f"{self.jaw_chin}" if self.jaw_chin else "",
-            ])
+            filter(
+                None,
+                [
+                    self.face_shape,
+                    f"{self.eye_shape} eyes {self.eye_color}" if self.eye_shape else "",
+                    f"{self.eyebrow} eyebrows" if self.eyebrow else "",
+                    f"{self.nose} nose" if self.nose else "",
+                    f"{self.mouth_lips} lips" if self.mouth_lips else "",
+                    f"{self.jaw_chin}" if self.jaw_chin else "",
+                ],
+            )
         )
         if face_desc:
             parts.append(f"Face: {face_desc}")
 
-        skin_desc = ", ".join(
-            filter(None, [self.skin_tone, self.skin_texture])
-        )
+        skin_desc = ", ".join(filter(None, [self.skin_tone, self.skin_texture]))
         if skin_desc:
             parts.append(f"S: {skin_desc}")
 
-        hair_desc = ", ".join(
-            filter(None, [self.hair_style, self.hair_color])
-        )
+        hair_desc = ", ".join(filter(None, [self.hair_style, self.hair_color]))
         if hair_desc:
             parts.append(f"Hair: {hair_desc}")
 
@@ -185,18 +184,12 @@ class Script:
         chars = [Character(**c) for c in data.pop("characters", [])]
         return cls(scenes=scenes, characters=chars, **data)
 
-    def inject_characters(
-        self, visual_prompt: str, scene_characters: list[str]
-    ) -> str:
+    def inject_characters(self, visual_prompt: str, scene_characters: list[str]) -> str:
         """Prepend character appearance descriptions to a visual_prompt."""
         if not scene_characters:
             return visual_prompt
         char_map = {c.name: c.appearance for c in self.characters if c.appearance}
-        descs = [
-            f"{name}: {char_map[name]}"
-            for name in scene_characters
-            if name in char_map
-        ]
+        descs = [f"{name}: {char_map[name]}" for name in scene_characters if name in char_map]
         if not descs:
             return visual_prompt
         return f"Characters: {'; '.join(descs)}. {visual_prompt}"

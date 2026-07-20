@@ -45,10 +45,8 @@ class ConsistencyReport:
             print("  ✓ No consistency issues found.", file=file)
             return
         print(f"  Found {len(self.issues)} consistency issue(s):", file=file)
-        for i, issue in enumerate(self.issues, 1):
-            tag = {"critical": "✗", "warning": "⚠", "info": "ℹ"}.get(
-                issue.severity, "•"
-            )
+        for _i, issue in enumerate(self.issues, 1):
+            tag = {"critical": "✗", "warning": "⚠", "info": "ℹ"}.get(issue.severity, "•")
             print(f"  {tag} [{issue.category}] {issue.description}", file=file)
             if issue.location:
                 print(f"      Location: {issue.location}", file=file)
@@ -57,7 +55,8 @@ class ConsistencyReport:
         print(f"\n  Summary: {self.summary}", file=file)
 
 
-_SYSTEM_PROMPT = """You are a professional short-drama script editor. Analyze the provided scripts for plot consistency issues and output **only** valid JSON.
+_SYSTEM_PROMPT = """You are a professional short-drama script editor.
+Analyze the provided scripts for plot consistency issues and output **only** valid JSON.
 
 Focus on:
 - Character consistency (name spelling, personality, relationships, voices)
@@ -107,16 +106,16 @@ def check_consistency(
     for script in scripts:
         ep = script.episode or 0
         summary_lines.append(f"Episode {ep}: {script.title}")
-        summary_lines.append(f"  Characters: {', '.join(c.name for c in script.characters) or 'none'}")
+        summary_lines.append(
+            f"  Characters: {', '.join(c.name for c in script.characters) or 'none'}"
+        )
         for scene in script.scenes:
             chars = ", ".join(scene.character_appearances) or "none"
             dialogues = "; ".join(
-                f"{d.get('character', '?')}: {d.get('line', '')[:60]}"
-                for d in scene.dialogues[:3]
+                f"{d.get('character', '?')}: {d.get('line', '')[:60]}" for d in scene.dialogues[:3]
             )
             summary_lines.append(
-                f"  Scene {scene.id}: [{scene.camera}] {scene.narration[:100]}"
-                f" | chars: {chars}"
+                f"  Scene {scene.id}: [{scene.camera}] {scene.narration[:100]} | chars: {chars}"
             )
             if dialogues:
                 summary_lines.append(f"    Dialogues: {dialogues}")
@@ -183,7 +182,7 @@ def _parse_report(raw: str) -> ConsistencyReport:
     if cleaned.startswith("```"):
         first_nl = cleaned.find("\n")
         if first_nl != -1:
-            cleaned = cleaned[first_nl + 1:]
+            cleaned = cleaned[first_nl + 1 :]
         if cleaned.endswith("```"):
             cleaned = cleaned[:-3].strip()
         elif "```" in cleaned:

@@ -18,10 +18,9 @@ import argparse
 import json
 import sys
 from pathlib import Path
-from typing import Any
 
 from agnes_video_creator.assembler import assemble_video
-from agnes_video_creator.batch import get_queue, get_worker, stop_worker
+from agnes_video_creator.batch import get_queue, get_worker
 from agnes_video_creator.config import AgnesConfig
 from agnes_video_creator.consistency import check_script_file
 from agnes_video_creator.image_generator import generate_scene_images
@@ -31,10 +30,8 @@ from agnes_video_creator.pipeline_state import EpisodeState, PipelineState, Scen
 from agnes_video_creator.project import Project, find_project
 from agnes_video_creator.reference import analyze_reference_video, generate_reference_script
 from agnes_video_creator.script_generator import generate_script
-from agnes_video_creator.utils import json_pretty
 from agnes_video_creator.video_generator import generate_video_clips
 from agnes_video_creator.web_ui import run_server as _run_web_server
-
 
 # ── Command implementations ───────────────────────────────────────────
 
@@ -139,9 +136,12 @@ def cmd_create(args: argparse.Namespace) -> None:
         needs_script, needs_images, needs_videos = True, True, True
 
     step = 0
-    total_steps = 4 - int(args.skip_images or (script is not None and not needs_images)) \
-                    - int(args.skip_video or (script is not None and not needs_videos)) \
-                    - int(args.skip_assembly)
+    total_steps = (
+        4
+        - int(args.skip_images or (script is not None and not needs_images))
+        - int(args.skip_video or (script is not None and not needs_videos))
+        - int(args.skip_assembly)
+    )
 
     # ── Step 1: Script generation ──
     step += 1
@@ -160,7 +160,7 @@ def cmd_create(args: argparse.Namespace) -> None:
         if not args.no_review:
             _review_script(script)
     elif not args.quiet:
-        print(f"\n  ✓ Script loaded from disk, skipping.", file=sys.stderr)
+        print("\n  ✓ Script loaded from disk, skipping.", file=sys.stderr)
 
     script_path = _script_path(cfg)
     script.save(script_path)
@@ -177,9 +177,7 @@ def cmd_create(args: argparse.Namespace) -> None:
     ep = state.episode(1) or EpisodeState(episode_number=1)
     ep.status = "script_ready"
     ep.script_path = str(script_path)
-    ep.scenes = [
-        SceneState(scene_id=s.id) for s in script.scenes
-    ]
+    ep.scenes = [SceneState(scene_id=s.id) for s in script.scenes]
     state.upsert_episode(ep)
     state.save(state_path)
 
@@ -214,7 +212,7 @@ def cmd_create(args: argparse.Namespace) -> None:
         ep.status = "images_ready" if ep.all_images_done else "failed"
         state.save(state_path)
     elif args.resume and not needs_images and not args.quiet:
-        print(f"\n  ✓ All scenes already have images, skipping.", file=sys.stderr)
+        print("\n  ✓ All scenes already have images, skipping.", file=sys.stderr)
 
     # ── Step 3: Video clips ──
     do_videos = not args.skip_video and needs_videos
@@ -239,7 +237,7 @@ def cmd_create(args: argparse.Namespace) -> None:
         ep.status = "videos_ready" if ep.all_videos_done else "failed"
         state.save(state_path)
     elif args.resume and not needs_videos and not args.quiet:
-        print(f"\n  ✓ All scenes already have videos, skipping.", file=sys.stderr)
+        print("\n  ✓ All scenes already have videos, skipping.", file=sys.stderr)
 
     # ── Step 4: Assembly ──
     if not args.skip_assembly:
@@ -259,7 +257,8 @@ def cmd_create(args: argparse.Namespace) -> None:
 
 
 def cmd_ref_create(args: argparse.Namespace) -> None:
-    """End-to-end: analyze reference video → generate style-matched script → images → clips → assembly."""
+    """End-to-end: analyze reference video → generate style-matched script
+    → images → clips → assembly."""
     cfg = _build_cfg(args)
     _require_key(cfg)
 
@@ -285,10 +284,12 @@ def cmd_ref_create(args: argparse.Namespace) -> None:
         script = None
         needs_script, needs_images, needs_videos = True, True, True
 
-    total_steps = (5 if needs_script else 4) \
-                     - int(args.skip_images or not needs_images) \
-                     - int(args.skip_video or not needs_videos) \
-                     - int(args.skip_assembly)
+    total_steps = (
+        (5 if needs_script else 4)
+        - int(args.skip_images or not needs_images)
+        - int(args.skip_video or not needs_videos)
+        - int(args.skip_assembly)
+    )
 
     step = 0
 
@@ -296,7 +297,9 @@ def cmd_ref_create(args: argparse.Namespace) -> None:
     if needs_script:
         step += 1
         if not args.quiet:
-            print(f"\n=== Step {step}/{total_steps}: Analyzing reference video ===", file=sys.stderr)
+            print(
+                f"\n=== Step {step}/{total_steps}: Analyzing reference video ===", file=sys.stderr
+            )
         profile = analyze_reference_video(
             args.reference,
             cfg,
@@ -308,7 +311,10 @@ def cmd_ref_create(args: argparse.Namespace) -> None:
     if needs_script:
         step += 1
         if not args.quiet:
-            print(f"\n=== Step {step}/{total_steps}: Generating style-matched script ===", file=sys.stderr)
+            print(
+                f"\n=== Step {step}/{total_steps}: Generating style-matched script ===",
+                file=sys.stderr,
+            )
         script = generate_reference_script(
             args.topic,
             profile,
@@ -319,7 +325,7 @@ def cmd_ref_create(args: argparse.Namespace) -> None:
         voice_map = _parse_voice_map(getattr(args, "voice_map", None))
         _apply_voice_map(script, voice_map)
     elif not args.quiet:
-        print(f"\n  ✓ Script loaded from disk, skipping.", file=sys.stderr)
+        print("\n  ✓ Script loaded from disk, skipping.", file=sys.stderr)
 
     script_path = _script_path(cfg)
     script.save(script_path)
@@ -369,7 +375,7 @@ def cmd_ref_create(args: argparse.Namespace) -> None:
         ep.status = "images_ready" if ep.all_images_done else "failed"
         state.save(state_path)
     elif args.resume and not needs_images and not args.quiet:
-        print(f"\n  ✓ All scenes already have images, skipping.", file=sys.stderr)
+        print("\n  ✓ All scenes already have images, skipping.", file=sys.stderr)
 
     # ── Step 3: Video clips ──
     do_videos = not args.skip_video and needs_videos
@@ -394,7 +400,7 @@ def cmd_ref_create(args: argparse.Namespace) -> None:
         ep.status = "videos_ready" if ep.all_videos_done else "failed"
         state.save(state_path)
     elif args.resume and not needs_videos and not args.quiet:
-        print(f"\n  ✓ All scenes already have videos, skipping.", file=sys.stderr)
+        print("\n  ✓ All scenes already have videos, skipping.", file=sys.stderr)
 
     # ── Step 4: Assembly ──
     if not args.skip_assembly:
@@ -454,7 +460,8 @@ def cmd_novel(args: argparse.Namespace) -> None:
         )
 
     scripts = novel_to_episodes(
-        text, cfg,
+        text,
+        cfg,
         max_episodes=total_episodes,
         resume_from=resume_episode,
         verbose=not args.quiet,
@@ -478,9 +485,7 @@ def cmd_novel(args: argparse.Namespace) -> None:
         )
         ep.status = "script_ready"
         ep.script_path = str(ep_path)
-        ep.scenes = [
-            SceneState(scene_id=s.id) for s in script.scenes
-        ]
+        ep.scenes = [SceneState(scene_id=s.id) for s in script.scenes]
         state.upsert_episode(ep)
 
         if not args.quiet:
@@ -489,10 +494,12 @@ def cmd_novel(args: argparse.Namespace) -> None:
     state.save(state_path)
 
     if not args.quiet:
-        print(f"\n✓ {len(saved)} episode script(s) saved to {cfg.resolved_output}/", file=sys.stderr)
+        print(
+            f"\n✓ {len(saved)} episode script(s) saved to {cfg.resolved_output}/", file=sys.stderr
+        )
         for p in saved:
             print(f"    {p}", file=sys.stderr)
-        print(f"\nNext: agnes-video project render --episode 1", file=sys.stderr)
+        print("\nNext: agnes-video project render --episode 1", file=sys.stderr)
 
 
 def cmd_status(args: argparse.Namespace) -> None:
@@ -529,9 +536,11 @@ def cmd_check(args: argparse.Namespace) -> None:
         if not proj:
             raise SystemExit("No project.json found. --project requires a project directory.")
         project = Project.load(proj)
-        ep_paths = [e.script_path for e in project.episodes
-                     if e.script_path and Path(e.script_path).exists()
-                     and e.status not in ("pending",)]
+        ep_paths = [
+            e.script_path
+            for e in project.episodes
+            if e.script_path and Path(e.script_path).exists() and e.status not in ("pending",)
+        ]
         if not ep_paths:
             raise SystemExit("No episodes with scripts found in project.")
         script_paths = ep_paths
@@ -557,9 +566,7 @@ def cmd_check(args: argparse.Namespace) -> None:
         print(f"  Total: {total_critical} critical, {total_warnings} warning(s)", file=sys.stderr)
 
     if total_critical > 0:
-        raise SystemExit(
-            f"✗ {total_critical} critical, {total_warnings} warning(s) found."
-        )
+        raise SystemExit(f"✗ {total_critical} critical, {total_warnings} warning(s) found.")
 
 
 # ── Project commands ──────────────────────────────────────────────────
@@ -586,7 +593,7 @@ def cmd_project_init(args: argparse.Namespace) -> None:
     print(f"Project created: {project.root}/", file=sys.stderr)
     if args.novel:
         print(f"  Novel: {args.novel}", file=sys.stderr)
-    print(f"\nNext: agnes-video project analyze", file=sys.stderr)
+    print("\nNext: agnes-video project analyze", file=sys.stderr)
 
 
 def cmd_project_analyze(args: argparse.Namespace) -> None:
@@ -605,8 +612,8 @@ def cmd_project_analyze(args: argparse.Namespace) -> None:
         raise SystemExit(f"Novel file not found: {project.novel_path}")
 
     project.analyze_novel(max_episodes=args.episodes, verbose=not args.quiet)
-    print(f"\n✓ Analysis complete.", file=sys.stderr)
-    print(f"Next: agnes-video project status", file=sys.stderr)
+    print("\n✓ Analysis complete.", file=sys.stderr)
+    print("Next: agnes-video project status", file=sys.stderr)
 
 
 def cmd_project_render(args: argparse.Namespace) -> None:
@@ -672,7 +679,7 @@ def cmd_batch(args: argparse.Namespace) -> None:
                 project=args.project,
                 episode_num=args.episode or 0,
             )
-        print(f"  ✓ Job submitted to batch queue.", file=sys.stderr)
+        print("  ✓ Job submitted to batch queue.", file=sys.stderr)
         # Ensure the worker is running
         get_worker(q)
 
@@ -686,8 +693,7 @@ def cmd_batch(args: argparse.Namespace) -> None:
         for j in items:
             ep = f" EP{j.episode_num}" if j.episode_num else ""
             print(
-                f"  [{j.status:>9}] {j.id}  {j.job_type}{ep}"
-                f"  {j.created_at[:19]}",
+                f"  [{j.status:>9}] {j.id}  {j.job_type}{ep}  {j.created_at[:19]}",
                 file=sys.stderr,
             )
 
@@ -752,11 +758,15 @@ def build_parser() -> argparse.ArgumentParser:
     # ── render ─────────────────────────────────────────────────────
     render = sub.add_parser("render", help="Generate video clips for each scene")
     render.add_argument("script", help="Script JSON file path")
-    render.add_argument("--mode", default="image-to-video",
-                        choices=("text-to-video", "image-to-video", "keyframes"),
-                        help="Video generation mode (default: image-to-video)")
-    render.add_argument("--no-poll", action="store_true",
-                        help="Don't poll for completion (just create tasks)")
+    render.add_argument(
+        "--mode",
+        default="image-to-video",
+        choices=("text-to-video", "image-to-video", "keyframes"),
+        help="Video generation mode (default: image-to-video)",
+    )
+    render.add_argument(
+        "--no-poll", action="store_true", help="Don't poll for completion (just create tasks)"
+    )
     render.set_defaults(func=cmd_render)
 
     # ── assemble ──────────────────────────────────────────────────
@@ -770,23 +780,48 @@ def build_parser() -> argparse.ArgumentParser:
     create.add_argument("topic", help="Video topic description")
     create.add_argument("--style", help="Visual style hint")
     create.add_argument("--duration", type=float, default=15.0, help="Target duration in seconds")
-    create.add_argument("--mode", default="image-to-video",
-                        choices=("text-to-video", "image-to-video", "keyframes"),
-                        help="Video generation mode (default: image-to-video)")
+    create.add_argument(
+        "--mode",
+        default="image-to-video",
+        choices=("text-to-video", "image-to-video", "keyframes"),
+        help="Video generation mode (default: image-to-video)",
+    )
     create.add_argument("--output", "-o", help="Output video filename")
     create.add_argument("--no-poll", action="store_true", help="Don't poll for video completion")
-    create.add_argument("--resume", "-r", action="store_true",
-                        help="Resume from existing output directory, skipping completed steps")
-    create.add_argument("--no-review", action="store_true",
-                        help="Skip the pause-for-review step after script generation")
-    create.add_argument("--voice-map",
-                        help="Per-character voice assignment, JSON or key=value pairs (e.g. '{\"林黛玉\":\"zh-CN-XiaoxiaoNeural\"}')")
-    create.add_argument("--subtitle-font", help="System font path for subtitles (default: auto-detect CJK)")
-    create.add_argument("--subtitle-size", type=int, default=0, help="Subtitle font size (default: 28)")
+    create.add_argument(
+        "--resume",
+        "-r",
+        action="store_true",
+        help="Resume from existing output directory, skipping completed steps",
+    )
+    create.add_argument(
+        "--no-review",
+        action="store_true",
+        help="Skip the pause-for-review step after script generation",
+    )
+    create.add_argument(
+        "--voice-map",
+        help='Per-character voice assignment, JSON or key=value pairs '
+        '(e.g. \'{"林黛玉":"zh-CN-XiaoxiaoNeural"}\')',
+    )
+    create.add_argument(
+        "--subtitle-font", help="System font path for subtitles (default: auto-detect CJK)"
+    )
+    create.add_argument(
+        "--subtitle-size", type=int, default=0, help="Subtitle font size (default: 28)"
+    )
     create.add_argument("--subtitle-color", help="Subtitle font color (default: white)")
-    create.add_argument("--subtitle-position", choices=("bottom", "top", "middle"), help="Subtitle vertical position (default: bottom)")
-    create.add_argument("--scene", type=int, default=0,
-                        help="Only regenerate this specific scene ID (requires --resume)")
+    create.add_argument(
+        "--subtitle-position",
+        choices=("bottom", "top", "middle"),
+        help="Subtitle vertical position (default: bottom)",
+    )
+    create.add_argument(
+        "--scene",
+        type=int,
+        default=0,
+        help="Only regenerate this specific scene ID (requires --resume)",
+    )
     create.add_argument("--skip-images", action="store_true", help="Skip image generation step")
     create.add_argument("--skip-video", action="store_true", help="Skip video generation step")
     create.add_argument("--skip-assembly", action="store_true", help="Skip video assembly step")
@@ -801,23 +836,45 @@ def build_parser() -> argparse.ArgumentParser:
     ref.add_argument("topic", help="Description of the new video content")
     ref.add_argument("--style", help="Additional style hint (merged with reference)")
     ref.add_argument("--duration", type=float, default=15.0, help="Target duration in seconds")
-    ref.add_argument("--ref-frames", type=int, default=3,
-                     help="Number of frames to extract from reference (default: 3)")
-    ref.add_argument("--mode", default="image-to-video",
-                     choices=("text-to-video", "image-to-video", "keyframes"),
-                     help="Video generation mode (default: image-to-video)")
+    ref.add_argument(
+        "--ref-frames",
+        type=int,
+        default=3,
+        help="Number of frames to extract from reference (default: 3)",
+    )
+    ref.add_argument(
+        "--mode",
+        default="image-to-video",
+        choices=("text-to-video", "image-to-video", "keyframes"),
+        help="Video generation mode (default: image-to-video)",
+    )
     ref.add_argument("--output", "-o", help="Output video filename")
     ref.add_argument("--no-poll", action="store_true", help="Don't poll for video completion")
-    ref.add_argument("--resume", "-r", action="store_true",
-                     help="Resume from existing output directory, skipping completed steps")
-    ref.add_argument("--voice-map",
-                     help="Per-character voice assignment, JSON or key=value pairs")
-    ref.add_argument("--subtitle-font", help="System font path for subtitles (default: auto-detect CJK)")
-    ref.add_argument("--subtitle-size", type=int, default=0, help="Subtitle font size (default: 28)")
+    ref.add_argument(
+        "--resume",
+        "-r",
+        action="store_true",
+        help="Resume from existing output directory, skipping completed steps",
+    )
+    ref.add_argument("--voice-map", help="Per-character voice assignment, JSON or key=value pairs")
+    ref.add_argument(
+        "--subtitle-font", help="System font path for subtitles (default: auto-detect CJK)"
+    )
+    ref.add_argument(
+        "--subtitle-size", type=int, default=0, help="Subtitle font size (default: 28)"
+    )
     ref.add_argument("--subtitle-color", help="Subtitle font color (default: white)")
-    ref.add_argument("--subtitle-position", choices=("bottom", "top", "middle"), help="Subtitle vertical position (default: bottom)")
-    ref.add_argument("--scene", type=int, default=0,
-                     help="Only regenerate this specific scene ID (requires --resume)")
+    ref.add_argument(
+        "--subtitle-position",
+        choices=("bottom", "top", "middle"),
+        help="Subtitle vertical position (default: bottom)",
+    )
+    ref.add_argument(
+        "--scene",
+        type=int,
+        default=0,
+        help="Only regenerate this specific scene ID (requires --resume)",
+    )
     ref.add_argument("--skip-images", action="store_true", help="Skip image generation step")
     ref.add_argument("--skip-video", action="store_true", help="Skip video generation step")
     ref.add_argument("--skip-assembly", action="store_true", help="Skip video assembly step")
@@ -831,19 +888,29 @@ def build_parser() -> argparse.ArgumentParser:
     # ── check ────────────────────────────────────────────────────
     check = sub.add_parser("check", help="Check script(s) for plot continuity issues")
     check.add_argument("script", nargs="*", default=[], help="Script JSON file path(s)")
-    check.add_argument("--project", action="store_true", dest="project_check",
-                       help="Check all episodes in the current project")
+    check.add_argument(
+        "--project",
+        action="store_true",
+        dest="project_check",
+        help="Check all episodes in the current project",
+    )
     check.set_defaults(func=cmd_check)
 
     # ── novel ─────────────────────────────────────────────────────
     novel = sub.add_parser("novel", help="Import novel text and generate episode scripts")
     novel.add_argument("file", help="Path to the novel text file (.txt)")
-    novel.add_argument("--episodes", type=int, default=4,
-                       help="Max episodes to generate (default: 4)")
-    novel.add_argument("--episode", type=int, default=0,
-                       help="Generate only this specific episode number (default: all)")
-    novel.add_argument("--voice-map",
-                       help="Per-character voice assignment, JSON or key=value pairs")
+    novel.add_argument(
+        "--episodes", type=int, default=4, help="Max episodes to generate (default: 4)"
+    )
+    novel.add_argument(
+        "--episode",
+        type=int,
+        default=0,
+        help="Generate only this specific episode number (default: all)",
+    )
+    novel.add_argument(
+        "--voice-map", help="Per-character voice assignment, JSON or key=value pairs"
+    )
     novel.set_defaults(func=cmd_novel)
 
     # ── project ────────────────────────────────────────────────────
@@ -858,38 +925,52 @@ def build_parser() -> argparse.ArgumentParser:
     p_init.add_argument("--target", help="Target audience")
     p_init.add_argument("--no-audio", action="store_true", help="Disable TTS narration")
     p_init.add_argument("--no-subtitles", action="store_true", help="Disable subtitles")
-    p_init.add_argument("--mode", default="image-to-video",
-                        choices=("text-to-video", "image-to-video", "keyframes"),
-                        help="Video mode (default: image-to-video)")
-    p_init.add_argument("--parallel", "-j", action="store_true",
-                        help="Enable parallel episode rendering (default: sequential)")
-    p_init.add_argument("--max-workers", type=int, default=2,
-                        help="Max parallel workers (default: 2)")
-    p_init.add_argument("--no-storyboard", action="store_true",
-                        help="Disable storyboard preview after images")
+    p_init.add_argument(
+        "--mode",
+        default="image-to-video",
+        choices=("text-to-video", "image-to-video", "keyframes"),
+        help="Video mode (default: image-to-video)",
+    )
+    p_init.add_argument(
+        "--parallel",
+        "-j",
+        action="store_true",
+        help="Enable parallel episode rendering (default: sequential)",
+    )
+    p_init.add_argument(
+        "--max-workers", type=int, default=2, help="Max parallel workers (default: 2)"
+    )
+    p_init.add_argument(
+        "--no-storyboard", action="store_true", help="Disable storyboard preview after images"
+    )
     p_init.set_defaults(func=cmd_project_init)
 
     p_status = project_sub.add_parser("status", help="Show project status")
     p_status.set_defaults(func=cmd_project_status)
 
     p_render = project_sub.add_parser("render", help="Render one or all episodes")
-    p_render.add_argument("--episode", type=int, default=0,
-                          help="Episode number to render (default: all pending)")
+    p_render.add_argument(
+        "--episode", type=int, default=0, help="Episode number to render (default: all pending)"
+    )
     p_render.add_argument("--no-poll", action="store_true", help="Don't poll for video completion")
     p_render.add_argument("--skip-images", action="store_true", help="Skip image generation")
     p_render.add_argument("--skip-video", action="store_true", help="Skip video generation")
     p_render.add_argument("--skip-assembly", action="store_true", help="Skip assembly")
-    p_render.add_argument("--parallel", "-j", action="store_true",
-                          help="Render episodes concurrently")
-    p_render.add_argument("--max-workers", type=int, default=0,
-                          help="Max parallel workers (default: 2)")
-    p_render.add_argument("--no-storyboard", action="store_true",
-                          help="Skip storyboard preview after images")
+    p_render.add_argument(
+        "--parallel", "-j", action="store_true", help="Render episodes concurrently"
+    )
+    p_render.add_argument(
+        "--max-workers", type=int, default=0, help="Max parallel workers (default: 2)"
+    )
+    p_render.add_argument(
+        "--no-storyboard", action="store_true", help="Skip storyboard preview after images"
+    )
     p_render.set_defaults(func=cmd_project_render)
 
     p_analyze = project_sub.add_parser("analyze", help="Analyze novel and create episode scripts")
-    p_analyze.add_argument("--episodes", type=int, default=12,
-                           help="Max episodes to generate (default: 12)")
+    p_analyze.add_argument(
+        "--episodes", type=int, default=12, help="Max episodes to generate (default: 12)"
+    )
     p_analyze.set_defaults(func=cmd_project_analyze)
 
     # ── web ─────────────────────────────────────────────────────────
@@ -903,11 +984,15 @@ def build_parser() -> argparse.ArgumentParser:
     batch_sub = batch.add_subparsers(dest="batch_command", required=True)
 
     b_submit = batch_sub.add_parser("submit", help="Submit a job to the batch queue")
-    b_submit.add_argument("job_type", choices=("render_episode", "render_all", "analyze", "check"),
-                          help="Type of job to submit")
+    b_submit.add_argument(
+        "job_type",
+        choices=("render_episode", "render_all", "analyze", "check"),
+        help="Type of job to submit",
+    )
     b_submit.add_argument("--project", default="", help="Project name (default: auto-detect)")
-    b_submit.add_argument("--episode", type=int, default=0,
-                          help="Episode number (required for render_episode, check)")
+    b_submit.add_argument(
+        "--episode", type=int, default=0, help="Episode number (required for render_episode, check)"
+    )
     b_submit.set_defaults(func=cmd_batch)
 
     b_list = batch_sub.add_parser("list", help="List recent batch jobs")
@@ -949,10 +1034,7 @@ def _build_cfg(args: argparse.Namespace) -> AgnesConfig:
 
 def _require_key(cfg: AgnesConfig) -> None:
     if not cfg.has_api_key:
-        raise SystemExit(
-            "AGNES_API_KEY not found. Set the environment variable or "
-            "pass --api-key."
-        )
+        raise SystemExit("AGNES_API_KEY not found. Set the environment variable or pass --api-key.")
 
 
 def _script_path(cfg: AgnesConfig) -> str:
@@ -994,7 +1076,7 @@ def _review_script(script: Script) -> None:
             print("\nEdit the script JSON file, then re-run with --resume.", file=sys.stderr)
             raise SystemExit(0)
     except (EOFError, KeyboardInterrupt):
-        raise SystemExit(0)
+        raise SystemExit(0) from None
 
 
 def _video_mode(args: argparse.Namespace) -> str:

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import os
 import random
 import re
 import sys
@@ -14,7 +13,6 @@ from pathlib import Path
 from typing import Any
 
 from agnes_video_creator.config import AgnesConfig
-
 
 # ── HTTP helpers (with retry) ─────────────────────────────────────────
 
@@ -32,8 +30,16 @@ def _is_retryable(err: Exception) -> bool:
         return 500 <= err.code < 600
     if isinstance(err, urllib.error.URLError):
         reason = str(err.reason).lower()
-        for keyword in ("timeout", "timed out", "connection", "reset",
-                        "refused", "eof", "broken", "name resolution"):
+        for keyword in (
+            "timeout",
+            "timed out",
+            "connection",
+            "reset",
+            "refused",
+            "eof",
+            "broken",
+            "name resolution",
+        ):
             if keyword in reason:
                 return True
     return False
@@ -112,9 +118,7 @@ def _request_with_retry(
         delay *= 2
 
     # Should not be reached, but keeps type-checkers happy
-    raise SystemExit(
-        f"Request failed for {path} after {cfg.request_retries} attempts: {last_err}"
-    )
+    raise SystemExit(f"Request failed for {path} after {cfg.request_retries} attempts: {last_err}")
 
 
 def request_json(
@@ -244,6 +248,4 @@ def poll_video_task(
         if status in {"completed", "failed"}:
             return last
         time.sleep(cfg.poll_interval)
-    raise SystemExit(
-        f"Timed out waiting for video task {task_id}. Last: {json.dumps(last)}"
-    )
+    raise SystemExit(f"Timed out waiting for video task {task_id}. Last: {json.dumps(last)}")

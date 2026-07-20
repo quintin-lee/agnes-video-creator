@@ -2,21 +2,21 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 # ── Per-unit pricing (USD, approximate) ─────────────────────────────
 # These are rough estimates and may change. Update them to match
 # current Agnes AI pricing.
-PRICE_PER_IMAGE: float = 0.04      # agnes-image-2.1-flash
+PRICE_PER_IMAGE: float = 0.04  # agnes-image-2.1-flash
 PRICE_PER_VIDEO_CLIP: float = 0.10  # agnes-video-v2.0
 PRICE_PER_TEXT_CALL: float = 0.002  # agnes-2.0-flash (~15K tokens)
 
 # ── Per-unit timing (seconds, approximate) ─────────────────────────
-TIME_PER_NOVEL_ANALYSIS: float = 30.0   # analyzing a novel for episode splitting
-TIME_PER_SCRIPT: float = 20.0            # generating a script
-TIME_PER_IMAGE: float = 25.0             # generating one image
-TIME_PER_VIDEO_CLIP: float = 90.0       # generating one video clip (with polling)
-TIME_PER_ASSEMBLY: float = 30.0         # ffmpeg assembly for one episode
+TIME_PER_NOVEL_ANALYSIS: float = 30.0  # analyzing a novel for episode splitting
+TIME_PER_SCRIPT: float = 20.0  # generating a script
+TIME_PER_IMAGE: float = 25.0  # generating one image
+TIME_PER_VIDEO_CLIP: float = 90.0  # generating one video clip (with polling)
+TIME_PER_ASSEMBLY: float = 30.0  # ffmpeg assembly for one episode
 
 
 @dataclass
@@ -57,11 +57,17 @@ class CostEstimate:
         """Return a human-readable summary string."""
         parts = []
         if self.images:
-            parts.append(f"{self.images} image(s) ~ ${self.cost_images:.2f} ~ {self.time_images:.0f}s")
+            parts.append(
+                f"{self.images} image(s) ~ ${self.cost_images:.2f} ~ {self.time_images:.0f}s"
+            )
         if self.video_clips:
-            parts.append(f"{self.video_clips} clip(s) ~ ${self.cost_videos:.2f} ~ {self.time_videos:.0f}s")
+            parts.append(
+                f"{self.video_clips} clip(s) ~ ${self.cost_videos:.2f} ~ {self.time_videos:.0f}s"
+            )
         if self.text_calls:
-            parts.append(f"{self.text_calls} call(s) ~ ${self.cost_text:.2f} ~ {self.time_text:.0f}s")
+            parts.append(
+                f"{self.text_calls} call(s) ~ ${self.cost_text:.2f} ~ {self.time_text:.0f}s"
+            )
         lines = "\n      ".join(parts) if parts else "  No operations to estimate."
         return (
             f"  Estimated cost: ${self.total_cost:.2f} USD\n"
@@ -90,8 +96,9 @@ class CostEstimate:
         return f"{seconds / 3600:.1f} hrs"
 
 
-def estimate_episode(scene_count: int, include_images: bool = True,
-                     include_video: bool = True) -> CostEstimate:
+def estimate_episode(
+    scene_count: int, include_images: bool = True, include_video: bool = True
+) -> CostEstimate:
     """Estimate cost/time for a single episode based on scene count."""
     return CostEstimate(
         images=scene_count if include_images else 0,
@@ -100,9 +107,9 @@ def estimate_episode(scene_count: int, include_images: bool = True,
     )
 
 
-def estimate_project(total_scenes: int, episodes: int = 1,
-                     include_images: bool = True,
-                     include_video: bool = True) -> CostEstimate:
+def estimate_project(
+    total_scenes: int, episodes: int = 1, include_images: bool = True, include_video: bool = True
+) -> CostEstimate:
     """Estimate cost/time for a full project."""
     return CostEstimate(
         images=total_scenes if include_images else 0,

@@ -13,11 +13,15 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Literal
 
-
 SceneStatus = Literal["pending", "success", "failed", "skipped"]
 EpisodeStatus = Literal[
-    "pending", "analyzing", "script_ready",
-    "images_ready", "videos_ready", "assembled", "failed",
+    "pending",
+    "analyzing",
+    "script_ready",
+    "images_ready",
+    "videos_ready",
+    "assembled",
+    "failed",
 ]
 
 
@@ -58,15 +62,11 @@ class EpisodeState:
 
     @property
     def all_images_done(self) -> bool:
-        return bool(self.scenes) and all(
-            s.image in ("success", "skipped") for s in self.scenes
-        )
+        return bool(self.scenes) and all(s.image in ("success", "skipped") for s in self.scenes)
 
     @property
     def all_videos_done(self) -> bool:
-        return bool(self.scenes) and all(
-            s.video in ("success", "skipped") for s in self.scenes
-        )
+        return bool(self.scenes) and all(s.video in ("success", "skipped") for s in self.scenes)
 
 
 @dataclass
@@ -86,9 +86,7 @@ class PipelineState:
         path = Path(path)
         self.updated_at = datetime.now(timezone.utc).isoformat()
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(
-            json.dumps(self.to_dict(), ensure_ascii=False, indent=2)
-        )
+        path.write_text(json.dumps(self.to_dict(), ensure_ascii=False, indent=2))
 
     @classmethod
     def load(cls, path: str | Path) -> PipelineState | None:
@@ -140,10 +138,7 @@ class PipelineState:
         return cls(
             project_name=project_name,
             output_dir=output_dir,
-            episodes=[
-                EpisodeState(episode_number=i + 1)
-                for i in range(num_episodes)
-            ],
+            episodes=[EpisodeState(episode_number=i + 1) for i in range(num_episodes)],
             created_at=now,
             updated_at=now,
         )

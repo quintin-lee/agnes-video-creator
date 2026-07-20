@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 
 
@@ -35,7 +35,7 @@ class AgnesConfig:
     video_negative_prompt: str = ""
 
     # ── Retry & timeout ──────────────────────────────────────────────
-    request_retries: int = 5      # max retries for failed API calls
+    request_retries: int = 5  # max retries for failed API calls
     request_base_delay: float = 4.0  # initial backoff seconds (doubles each retry)
     request_max_delay: float = 120.0  # cap on backoff per retry
     request_timeout: int = 3600  # seconds per HTTP request (text/image/video creation)

@@ -6,11 +6,10 @@ are used to:
   2. Provide consistent seed values per character
   3. (Future) Pass as reference images to image/video APIs
 """
+
 from __future__ import annotations
 
 import sys
-from dataclasses import asdict
-from pathlib import Path
 from typing import Any
 
 from agnes_video_creator.config import AgnesConfig
@@ -49,7 +48,7 @@ def generate_character_portraits(
     portraits_dir = cfg.resolved_output / "portraits"
     portraits_dir.mkdir(parents=True, exist_ok=True)
 
-    for i, char in enumerate(script.characters):
+    for _i, char in enumerate(script.characters):
         if char.portrait_url and char.portrait_path:
             if verbose:
                 print(f"  {char.name}: portrait exists, skipping", file=sys.stderr)
@@ -113,14 +112,17 @@ def generate_character_portraits(
 
         if not char.face_features or not char.face_features.is_populated():
             if verbose:
-                print(f"    Analyzing facial features...", file=sys.stderr)
+                print("    Analyzing facial features...", file=sys.stderr)
             ff = analyze_face(char.portrait_url, cfg, verbose=verbose)
             if ff is not None and ff.is_populated():
                 char.face_features = ff
                 if verbose:
-                    print(f"    ✓ Face features stored ({len(ff.distinctive_features)} distinctive marks)", file=sys.stderr)
+                    print(
+                        f"    ✓ Face features stored ({len(ff.distinctive_features)} distinctive marks)",
+                        file=sys.stderr,
+                    )
             elif verbose:
-                print(f"    ⚠ No face detected — will fall back to text prompt", file=sys.stderr)
+                print("    ⚠ No face detected — will fall back to text prompt", file=sys.stderr)
 
     return script
 

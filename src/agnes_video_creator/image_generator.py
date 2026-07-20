@@ -69,7 +69,7 @@ def generate_scene_images(
     visual_snippet = ""
     if continuity_state is not None and continuity_state.visual.is_populated():
         visual_snippet = continuity_state.visual.to_prompt_snippet()
-    # 
+    #
     if cfg is None:
         cfg = AgnesConfig.from_env()
     if not cfg.has_api_key:
@@ -84,7 +84,7 @@ def generate_scene_images(
         generate_character_portraits(script, cfg=cfg, verbose=verbose)
         script.save(str(cfg.resolved_output / "script.json"))
 
-    for i, scene in enumerate(script.scenes):
+    for _i, scene in enumerate(script.scenes):
         if scene_ids is not None and scene.id not in scene_ids:
             continue
         if scene.is_image_ready:
@@ -106,9 +106,7 @@ def generate_scene_images(
         # Prepend visual registry context (environments, props, outfits)
         if visual_snippet:
             base = f"Known references:\n{visual_snippet}\n\nScene: {base}"
-        enriched = _inject_face_features(
-            base, scene.character_appearances, script
-        )
+        enriched = _inject_face_features(base, scene.character_appearances, script)
         final_prompt, orig = prepare_prompt(enriched, cfg)
         if orig and verbose:
             print(f"    (translated from: {orig[:80]}...)", file=sys.stderr)
@@ -149,7 +147,10 @@ def generate_scene_images(
             print(f"    ✗ Failed: {msg}", file=sys.stderr)
             # Truncate prompt for display, avoiding binary glyph issues
             clean = final_prompt[:400].replace("\n", " ")
-            print(f"      Prompt: {clean}…" if len(final_prompt) > 400 else f"      Prompt: {clean}", file=sys.stderr)
+            print(
+                f"      Prompt: {clean}…" if len(final_prompt) > 400 else f"      Prompt: {clean}",
+                file=sys.stderr,
+            )
             print(f"      Skipping scene {scene.id}.", file=sys.stderr)
             continue
 

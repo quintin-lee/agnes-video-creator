@@ -7,9 +7,11 @@ credits on video generation for problematic scenes.
 
 from __future__ import annotations
 
+import contextlib
 import sys
 import webbrowser
 from pathlib import Path
+
 from agnes_video_creator.config import AgnesConfig
 from agnes_video_creator.models import Script
 
@@ -24,7 +26,7 @@ def generate_storyboard_html(script: Script, output_path: str | Path) -> Path:
     output.parent.mkdir(parents=True, exist_ok=True)
 
     scenes_html = ""
-    for i, scene in enumerate(script.scenes):
+    for _i, scene in enumerate(script.scenes):
         img_src = _resolve_image_src(scene.image_url or scene.image_path)
         cam = scene.camera or "static"
         style = scene.style or "cinematic"
@@ -32,10 +34,7 @@ def generate_storyboard_html(script: Script, output_path: str | Path) -> Path:
         # Character tags
         chars_html = ""
         if scene.character_appearances:
-            tags = "".join(
-                f'<span class="tag">{c}</span>'
-                for c in scene.character_appearances
-            )
+            tags = "".join(f'<span class="tag">{c}</span>' for c in scene.character_appearances)
             chars_html = f'<div class="tags">{tags}</div>'
 
         # Narration
@@ -48,9 +47,7 @@ def generate_storyboard_html(script: Script, output_path: str | Path) -> Path:
                 char_name = d.get("character", "")
                 line = d.get("line", "")
                 dialogues_html += (
-                    f'<div class="dialogue">'
-                    f'<span class="char">{char_name}</span>: {line}'
-                    f"</div>\n"
+                    f'<div class="dialogue"><span class="char">{char_name}</span>: {line}</div>\n'
                 )
 
         # Camera motion badge
@@ -81,9 +78,7 @@ def generate_storyboard_html(script: Script, output_path: str | Path) -> Path:
 
     char_list = ""
     if script.characters:
-        items = "".join(
-            f"<li>{c.name} — {c.role or '角色'}</li>" for c in script.characters
-        )
+        items = "".join(f"<li>{c.name} — {c.role or '角色'}</li>" for c in script.characters)
         char_list = f"<h3>角色 Characters</h3><ul>{items}</ul>"
 
     html = f"""<!DOCTYPE html>
@@ -147,7 +142,7 @@ footer {{ margin-top: 20px; font-size: 0.75em; color: #555; text-align: center; 
 <h2>{_escape(script.description)}</h2>
 <div class="sub">
     {len(script.scenes)} 个场景 · {script.total_duration:.0f}s 总时长
-    · {script.style_guide or ''}
+    · {script.style_guide or ""}
 </div>
 {char_list}
 <div class="grid">
@@ -183,8 +178,7 @@ def preview_storyboard(
         _try_open(html_path)
 
     print(
-        "\n  检查分镜中角色的面部一致性。\n"
-        "  继续生成视频? [Y/n]: ",
+        "\n  检查分镜中角色的面部一致性。\n  继续生成视频? [Y/n]: ",
         end="",
         file=sys.stderr,
     )
@@ -214,10 +208,7 @@ def _resolve_image_src(src: str | None) -> str:
 
 def _escape(text: str) -> str:
     return (
-        text.replace("&", "&amp;")
-        .replace("<", "&lt;")
-        .replace(">", "&gt;")
-        .replace('"', "&quot;")
+        text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;")
     )
 
 
@@ -238,7 +229,5 @@ def _camera_badge(cam: str) -> str:
 
 def _try_open(path: Path) -> None:
     """Try to open the HTML in a browser; fail silently."""
-    try:
+    with contextlib.suppress(Exception):
         webbrowser.open(str(path.resolve()))
-    except Exception:
-        pass

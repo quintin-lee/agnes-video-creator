@@ -11,12 +11,10 @@ Supports:
 from __future__ import annotations
 
 import json
-import os
 import shutil
 import subprocess
 import sys
 from pathlib import Path
-from typing import Any
 
 from agnes_video_creator.config import AgnesConfig
 from agnes_video_creator.models import Script
@@ -39,8 +37,7 @@ def assemble_video(
     # Check ffmpeg availability
     if not _check_ffmpeg():
         raise SystemExit(
-            "ffmpeg is required for video assembly. "
-            "Install it via your package manager."
+            "ffmpeg is required for video assembly. Install it via your package manager."
         )
 
     cfg.ensure_dirs()
@@ -55,8 +52,7 @@ def assemble_video(
         elif scene.video_url:
             if verbose:
                 print(
-                    f"  Scene {scene.id}: video URL not downloaded, "
-                    f"will use it",
+                    f"  Scene {scene.id}: video URL not downloaded, will use it",
                     file=sys.stderr,
                 )
         else:
@@ -72,10 +68,7 @@ def assemble_video(
             if scene.video_path and Path(scene.video_path).exists():
                 clip_paths.append(Path(scene.video_path))
         if not clip_paths:
-            raise SystemExit(
-                "No video clips available to assemble. "
-                "Run 'render' first."
-            )
+            raise SystemExit("No video clips available to assemble. Run 'render' first.")
 
     if verbose:
         print(
@@ -106,35 +99,42 @@ def assemble_video(
     concat_file = temp_dir / "concat_list.txt"
 
     if cfg.transition != "none" and len(normalised) > 1:
-        final_path = _assemble_with_fades(
-            normalised, concat_file, temp_dir, cfg, verbose
-        )
+        final_path = _assemble_with_fades(normalised, concat_file, temp_dir, cfg, verbose)
     else:
         # Simple concat
-        final_path = _assemble_simple(
-            normalised, concat_file, temp_dir, cfg, verbose
-        )
+        final_path = _assemble_simple(normalised, concat_file, temp_dir, cfg, verbose)
 
     # ── Step 3: Add narration if requested ──────────────────────
     if cfg.add_audio:
-        final_path = _add_narration(
-            final_path, script, temp_dir, cfg, verbose
-        )
+        final_path = _add_narration(final_path, script, temp_dir, cfg, verbose)
 
     # ── Step 3a: Prepend title card if requested ────────────────
     if cfg.title_card and script.title:
-        title_path = _create_title_card(script.title, script.description or "", temp_dir, cfg, verbose)
+        title_path = _create_title_card(
+            script.title, script.description or "", temp_dir, cfg, verbose
+        )
         if title_path:
             concat_list = temp_dir / "title_concat.txt"
             concat_list.write_text(
-                f"file '{title_path.resolve()}'\n"
-                f"file '{final_path.resolve()}'\n"
+                f"file '{title_path.resolve()}'\nfile '{final_path.resolve()}'\n"
             )
             concat_output = temp_dir / "with_title.mp4"
             subprocess.run(
-                ["ffmpeg", "-y", "-f", "concat", "-safe", "0",
-                 "-i", str(concat_list), "-c", "copy", str(concat_output)],
-                capture_output=True, check=False,
+                [
+                    "ffmpeg",
+                    "-y",
+                    "-f",
+                    "concat",
+                    "-safe",
+                    "0",
+                    "-i",
+                    str(concat_list),
+                    "-c",
+                    "copy",
+                    str(concat_output),
+                ],
+                capture_output=True,
+                check=False,
             )
             if concat_output.exists():
                 final_path = concat_output
@@ -145,14 +145,25 @@ def assemble_video(
         if credits_path:
             concat_list = temp_dir / "credits_concat.txt"
             concat_list.write_text(
-                f"file '{final_path.resolve()}'\n"
-                f"file '{credits_path.resolve()}'\n"
+                f"file '{final_path.resolve()}'\nfile '{credits_path.resolve()}'\n"
             )
             concat_output = temp_dir / "with_credits.mp4"
             subprocess.run(
-                ["ffmpeg", "-y", "-f", "concat", "-safe", "0",
-                 "-i", str(concat_list), "-c", "copy", str(concat_output)],
-                capture_output=True, check=False,
+                [
+                    "ffmpeg",
+                    "-y",
+                    "-f",
+                    "concat",
+                    "-safe",
+                    "0",
+                    "-i",
+                    str(concat_list),
+                    "-c",
+                    "copy",
+                    str(concat_output),
+                ],
+                capture_output=True,
+                check=False,
             )
             if concat_output.exists():
                 final_path = concat_output
@@ -220,9 +231,13 @@ def _camera_motion_filter(
 
     # Zoom effects
     if any(k in desc for k in ("zoom", "push in", "dolly in", "close-up", "closeup", "close up")):
-        return f"zoompan=z='min(zoom+0.005,1.3)':d={int(duration * fps)}:s={width}x{height}:fps={fps}"
+        return (
+            f"zoompan=z='min(zoom+0.005,1.3)':d={int(duration * fps)}:s={width}x{height}:fps={fps}"
+        )
     if any(k in desc for k in ("zoom out", "pull out", "dolly out", "wide")):
-        return f"zoompan=z='max(zoom-0.005,0.8)':d={int(duration * fps)}:s={width}x{height}:fps={fps}"
+        return (
+            f"zoompan=z='max(zoom-0.005,0.8)':d={int(duration * fps)}:s={width}x{height}:fps={fps}"
+        )
 
     # Pan effects
     if "pan left" in desc:
@@ -236,7 +251,9 @@ def _camera_motion_filter(
 
     # Tracking / follow
     if any(k in desc for k in ("track", "follow", "dolly")):
-        return f"zoompan=z='min(zoom+0.003,1.2)':d={int(duration * fps)}:s={width}x{height}:fps={fps}"
+        return (
+            f"zoompan=z='min(zoom+0.003,1.2)':d={int(duration * fps)}:s={width}x{height}:fps={fps}"
+        )
 
     # Rotation / Dutch angle
     if any(k in desc for k in ("rotate", "dutch", "tilted")):
@@ -244,7 +261,9 @@ def _camera_motion_filter(
 
     # Aerial / crane
     if any(k in desc for k in ("aerial", "crane", "bird", "overhead")):
-        return f"zoompan=z='max(zoom-0.008,0.7)':d={int(duration * fps)}:s={width}x{height}:fps={fps}"
+        return (
+            f"zoompan=z='max(zoom-0.008,0.7)':d={int(duration * fps)}:s={width}x{height}:fps={fps}"
+        )
 
     # Handheld / shaking
     if any(k in desc for k in ("handheld", "shake", "shaky", "camera shake")):
@@ -267,6 +286,7 @@ def _trim_clip(
     if trim_in <= 0 and trim_out <= 0:
         # Nothing to trim — copy as-is
         import shutil
+
         shutil.copy2(src, dst)
         return
 
@@ -275,6 +295,7 @@ def _trim_clip(
         if verbose:
             print(f"    ⚠ Cannot determine duration for {src.name}, skipping trim", file=sys.stderr)
         import shutil
+
         shutil.copy2(src, dst)
         return
 
@@ -282,18 +303,27 @@ def _trim_clip(
     end = dur - trim_out
     if end <= start:
         if verbose:
-            print(f"    ⚠ Trim in/out would leave empty clip ({start}s → {end}s), keeping original", file=sys.stderr)
+            print(
+                f"    ⚠ Trim in/out would leave empty clip ({start}s → {end}s), keeping original",
+                file=sys.stderr,
+            )
         import shutil
+
         shutil.copy2(src, dst)
         return
 
     duration = end - start
     cmd = [
-        "ffmpeg", "-y",
-        "-ss", f"{start:.3f}",
-        "-i", str(src),
-        "-t", f"{duration:.3f}",
-        "-c", "copy",
+        "ffmpeg",
+        "-y",
+        "-ss",
+        f"{start:.3f}",
+        "-i",
+        str(src),
+        "-t",
+        f"{duration:.3f}",
+        "-c",
+        "copy",
         str(dst),
     ]
     _run_ffmpeg(cmd, f"trim {src.name} [{start:.1f}s → {end:.1f}s]", verbose)
@@ -318,7 +348,8 @@ def _normalise_clip(
     filters = [f"fps={cfg.target_fps}"]
     if camera_desc:
         motion = _camera_motion_filter(
-            camera_desc, 5.0,
+            camera_desc,
+            5.0,
             fps=cfg.target_fps,
             width=cfg.video_width,
             height=cfg.video_height,
@@ -330,15 +361,24 @@ def _normalise_clip(
     cmd = [
         "ffmpeg",
         "-y",
-        "-i", str(src),
-        "-vf", vf,
-        "-c:v", "libx264",
-        "-preset", "fast",
-        "-crf", "18",
-        "-pix_fmt", "yuv420p",
-        "-c:a", "aac",
-        "-b:a", "128k",
-        "-movflags", "+faststart",
+        "-i",
+        str(src),
+        "-vf",
+        vf,
+        "-c:v",
+        "libx264",
+        "-preset",
+        "fast",
+        "-crf",
+        "18",
+        "-pix_fmt",
+        "yuv420p",
+        "-c:a",
+        "aac",
+        "-b:a",
+        "128k",
+        "-movflags",
+        "+faststart",
         str(dst),
     ]
     _run_ffmpeg(cmd, f"normalise {src.name}", verbose)
@@ -360,10 +400,14 @@ def _assemble_simple(
     cmd = [
         "ffmpeg",
         "-y",
-        "-f", "concat",
-        "-safe", "0",
-        "-i", str(concat_file),
-        "-c", "copy",
+        "-f",
+        "concat",
+        "-safe",
+        "0",
+        "-i",
+        str(concat_file),
+        "-c",
+        "copy",
         str(output),
     ]
     _run_ffmpeg(cmd, "concatenate clips", verbose)
@@ -390,9 +434,7 @@ def _assemble_with_fades(
     for i in range(len(clips)):
         filter_parts.append(f"[{i}:v][{i}:a]")
     # Add crossfade filters
-    filter_parts.append(
-        f"concat=n={len(clips)}:v=1:a=1[outv][outa]"
-    )
+    filter_parts.append(f"concat=n={len(clips)}:v=1:a=1[outv][outa]")
 
     # More robust approach: use concat demuxer with trimmed overlaps
     # Write a concat file with duration info
@@ -419,7 +461,6 @@ def _assemble_with_fades(
     # Start with first clip
     prev = "0:v"
     prev_a = "0:a"
-    offset = 0
 
     for i in range(1, n):
         # Calculate cumulative duration of previous clips minus transitions
@@ -430,10 +471,7 @@ def _assemble_with_fades(
             f"xfade=transition={xfade_type}:duration={td}:offset={prev_dur - td}[v{i}]"
         )
         # Audio crossfade
-        filters.append(
-            f"[{prev_a}][{i}:a]"
-            f"acrossfade=d={td}[a{i}]"
-        )
+        filters.append(f"[{prev_a}][{i}:a]acrossfade=d={td}[a{i}]")
         prev = f"v{i}"
         prev_a = f"a{i}"
 
@@ -441,19 +479,29 @@ def _assemble_with_fades(
         return _assemble_simple(clips, concat_file, temp_dir, cfg, verbose)
 
     filter_chain = ";".join(filters)
-    final_stream = f"[v{n - 1}][a{n - 1}]"
+    f"[v{n - 1}][a{n - 1}]"
 
     cmd += [
-        "-filter_complex", filter_chain,
-        "-map", f"[v{n - 1}]",
-        "-map", f"[a{n - 1}]",
-        "-c:v", "libx264",
-        "-preset", "fast",
-        "-crf", "18",
-        "-pix_fmt", "yuv420p",
-        "-c:a", "aac",
-        "-b:a", "128k",
-        "-movflags", "+faststart",
+        "-filter_complex",
+        filter_chain,
+        "-map",
+        f"[v{n - 1}]",
+        "-map",
+        f"[a{n - 1}]",
+        "-c:v",
+        "libx264",
+        "-preset",
+        "fast",
+        "-crf",
+        "18",
+        "-pix_fmt",
+        "yuv420p",
+        "-c:a",
+        "aac",
+        "-b:a",
+        "128k",
+        "-movflags",
+        "+faststart",
         str(output),
     ]
 
@@ -465,15 +513,16 @@ def _get_duration(video_path: Path) -> float:
     """Get video duration in seconds using ffprobe."""
     cmd = [
         "ffprobe",
-        "-v", "error",
-        "-show_entries", "format=duration",
-        "-of", "default=noprint_wrappers=1:nokey=1",
+        "-v",
+        "error",
+        "-show_entries",
+        "format=duration",
+        "-of",
+        "default=noprint_wrappers=1:nokey=1",
         str(video_path),
     ]
     try:
-        result = subprocess.run(
-            cmd, capture_output=True, text=True, check=True
-        )
+        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
         return float(result.stdout.strip())
     except (subprocess.CalledProcessError, ValueError):
         # Default fallback: treat as 5 seconds
@@ -481,9 +530,20 @@ def _get_duration(video_path: Path) -> float:
 
 
 _XFADE_POOL = [
-    "fade", "dissolve", "wipeleft", "wiperight", "wipeup", "wipedown",
-    "slideleft", "slideright", "slideup", "slidedown",
-    "pixelize", "fadeblack", "fadewhite", "radial",
+    "fade",
+    "dissolve",
+    "wipeleft",
+    "wiperight",
+    "wipeup",
+    "wipedown",
+    "slideleft",
+    "slideright",
+    "slideup",
+    "slidedown",
+    "pixelize",
+    "fadeblack",
+    "fadewhite",
+    "radial",
 ]
 
 # Deterministic pseudo-random picker for transition types
@@ -540,14 +600,14 @@ async def main():
     # Optional 4th argument: JSON mapping of character_name -> voice
     char_voice_json = sys.argv[4] if len(sys.argv) > 4 else "{}"
     char_voice: dict[str, str] = json.loads(char_voice_json)
-    
+
     data = json.loads(Path(script_path).read_text())
     audio_clips = []
     clip_index = 0
-    
+
     for scene in data.get("scenes", []):
         sid = scene.get("id", 0)
-        
+
         # 1. Narration (default voice)
         narration = scene.get("narration", "")
         if narration:
@@ -561,7 +621,7 @@ async def main():
                 "duration": scene.get("duration_seconds", 5.0),
             })
             clip_index += 1
-        
+
         # 2. Character dialogues (per-character voice)
         for dial in scene.get("dialogues", []):
             char_name = dial.get("character", "")
@@ -579,7 +639,7 @@ async def main():
                 "duration": 2.5,
             })
             clip_index += 1
-    
+
     # Save audio manifest
     manifest = output_dir / "audio_manifest.json"
     manifest.write_text(json.dumps(audio_clips, indent=2))
@@ -611,8 +671,7 @@ def _add_narration(
         except ImportError:
             if verbose:
                 print(
-                    "  edge-tts not available, skipping narration. "
-                    "Install: pip install edge-tts",
+                    "  edge-tts not available, skipping narration. Install: pip install edge-tts",
                     file=sys.stderr,
                 )
             return video_path
@@ -638,12 +697,20 @@ def _add_narration(
     if verbose:
         voices_str = ", ".join(f"{k}={v}" for k, v in char_voices.items())
         print(
-            f"  Generating narration audio (edge-tts, voice: {cfg.tts_voice}, chars: {voices_str or 'none'})...",
+            f"  Generating narration audio (edge-tts, voice: {cfg.tts_voice}, "
+            f"chars: {voices_str or 'none'})...",
             file=sys.stderr,
         )
 
     result = subprocess.run(
-        [sys.executable, str(nar_script), str(script_json), str(audio_dir), cfg.tts_voice, char_voices_json],
+        [
+            sys.executable,
+            str(nar_script),
+            str(script_json),
+            str(audio_dir),
+            cfg.tts_voice,
+            char_voices_json,
+        ],
         capture_output=True,
         text=True,
     )
@@ -672,17 +739,20 @@ def _add_narration(
     audio_files = [m["path"] for m in manifest_data]
     concat_audio = temp_dir / "audio_concat.mp3"
     concat_list = temp_dir / "audio_list.txt"
-    concat_list.write_text(
-        "\n".join(f"file '{f}'" for f in audio_files)
-    )
+    concat_list.write_text("\n".join(f"file '{f}'" for f in audio_files))
 
     subprocess.run(
         [
-            "ffmpeg", "-y",
-            "-f", "concat",
-            "-safe", "0",
-            "-i", str(concat_list),
-            "-c", "copy",
+            "ffmpeg",
+            "-y",
+            "-f",
+            "concat",
+            "-safe",
+            "0",
+            "-i",
+            str(concat_list),
+            "-c",
+            "copy",
             str(concat_audio),
         ],
         capture_output=True,
@@ -695,18 +765,24 @@ def _add_narration(
         return video_path
 
     # Mix narration with original video audio
+    output = video_path
     cmd = [
         "ffmpeg",
         "-y",
-        "-i", str(video_path),
-        "-i", str(concat_audio),
+        "-i",
+        str(video_path),
+        "-i",
+        str(concat_audio),
         "-filter_complex",
-        "[1:a]volume=1.0[voice];"
-        "[0:a][voice]amix=inputs=2:duration=first:dropout_transition=2",
-        "-c:v", "copy",
-        "-c:a", "aac",
-        "-b:a", "128k",
-        "-movflags", "+faststart",
+        "[1:a]volume=1.0[voice];[0:a][voice]amix=inputs=2:duration=first:dropout_transition=2",
+        "-c:v",
+        "copy",
+        "-c:a",
+        "aac",
+        "-b:a",
+        "128k",
+        "-movflags",
+        "+faststart",
         "-shortest",
         str(output),
     ]
@@ -715,9 +791,7 @@ def _add_narration(
 
     if output.exists():
         if cfg.add_subtitles:
-            output = _burn_subtitles(
-                output, manifest_data, temp_dir, cfg, verbose
-            )
+            output = _burn_subtitles(output, manifest_data, temp_dir, cfg, verbose)
         return output
     return video_path
 
@@ -749,8 +823,12 @@ def _generate_ass(manifest_data: list[dict], cfg: AgnesConfig) -> str:
         "ScaledBorderAndShadow: yes",
         "",
         "[V4+ Styles]",
-        f"Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding",
-        f"Style: Default,{font_name},{cfg.subtitle_size},&H00FFFFFF,&H000000FF,&H00000000,&H80000000,0,0,0,0,100,100,0,0,1,1,1,{align},20,20,20,1",
+        "Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, "
+        "OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, "
+        "ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, "
+        "MarginL, MarginR, MarginV, Encoding",
+        f"Style: Default,{font_name},{cfg.subtitle_size},&H00FFFFFF,&H000000FF,"
+        f"&H00000000,&H80000000,0,0,0,0,100,100,0,0,1,1,1,{align},20,20,20,1",
         "",
         "[Events]",
         "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text",
@@ -776,9 +854,7 @@ def _generate_ass(manifest_data: list[dict], cfg: AgnesConfig) -> str:
         end = cursor + dur
         # Escape ASS special characters
         safe = text.replace("{", "\\{").replace("}", "\\}")
-        lines.append(
-            f"Dialogue: 0,{_ts(start)},{_ts(end)},Default,,0,0,0,,{safe}"
-        )
+        lines.append(f"Dialogue: 0,{_ts(start)},{_ts(end)},Default,,0,0,0,,{safe}")
         cursor = end
 
     return "\n".join(lines)
@@ -848,15 +924,24 @@ def _burn_subtitles(
 
     output = temp_dir / "with_subs.mp4"
     cmd = [
-        "ffmpeg", "-y",
-        "-i", str(video_path),
-        "-vf", f"subtitles={sub_escaped}",
-        "-c:a", "copy",
-        "-c:v", "libx264",
-        "-preset", "fast",
-        "-crf", "18",
-        "-pix_fmt", "yuv420p",
-        "-movflags", "+faststart",
+        "ffmpeg",
+        "-y",
+        "-i",
+        str(video_path),
+        "-vf",
+        f"subtitles={sub_escaped}",
+        "-c:a",
+        "copy",
+        "-c:v",
+        "libx264",
+        "-preset",
+        "fast",
+        "-crf",
+        "18",
+        "-pix_fmt",
+        "yuv420p",
+        "-movflags",
+        "+faststart",
         str(output),
     ]
 
@@ -923,16 +1008,26 @@ def _create_title_card(
         )
 
     cmd = [
-        "ffmpeg", "-y",
-        "-f", "lavfi",
-        "-i", f"color=c=black:s={cfg.video_width}x{cfg.video_height}:d=4:r={cfg.target_fps}",
-        "-vf", ",".join(filters),
-        "-c:v", "libx264",
-        "-preset", "fast",
-        "-crf", "18",
-        "-pix_fmt", "yuv420p",
-        "-c:a", "aac",
-        "-b:a", "128k",
+        "ffmpeg",
+        "-y",
+        "-f",
+        "lavfi",
+        "-i",
+        f"color=c=black:s={cfg.video_width}x{cfg.video_height}:d=4:r={cfg.target_fps}",
+        "-vf",
+        ",".join(filters),
+        "-c:v",
+        "libx264",
+        "-preset",
+        "fast",
+        "-crf",
+        "18",
+        "-pix_fmt",
+        "yuv420p",
+        "-c:a",
+        "aac",
+        "-b:a",
+        "128k",
         str(output),
     ]
     _run_ffmpeg(cmd, "generate title card", verbose)
@@ -960,10 +1055,14 @@ def _create_end_credits(
 
     output = temp_dir / "end_credits.mp4"
     cmd = [
-        "ffmpeg", "-y",
-        "-f", "lavfi",
-        "-i", f"color=c=black:s={cfg.video_width}x{cfg.video_height}:d=4:r={cfg.target_fps}",
-        "-vf", (
+        "ffmpeg",
+        "-y",
+        "-f",
+        "lavfi",
+        "-i",
+        f"color=c=black:s={cfg.video_width}x{cfg.video_height}:d=4:r={cfg.target_fps}",
+        "-vf",
+        (
             f"drawtext=textfile={textfile}:"
             f"fontfile={font}:"
             f"fontsize=28:"
@@ -972,12 +1071,18 @@ def _create_end_credits(
             f"line_spacing=10:"
             f"box=1:boxcolor=black@0.5:boxborderw=15"
         ),
-        "-c:v", "libx264",
-        "-preset", "fast",
-        "-crf", "18",
-        "-pix_fmt", "yuv420p",
-        "-c:a", "aac",
-        "-b:a", "128k",
+        "-c:v",
+        "libx264",
+        "-preset",
+        "fast",
+        "-crf",
+        "18",
+        "-pix_fmt",
+        "yuv420p",
+        "-c:a",
+        "aac",
+        "-b:a",
+        "128k",
         str(output),
     ]
     _run_ffmpeg(cmd, "generate end credits", verbose)
@@ -1011,10 +1116,14 @@ def _add_bgm(
 
     # ffmpeg: loop BGM, trim to video duration, fade in/out, volume adjust, mix
     cmd = [
-        "ffmpeg", "-y",
-        "-i", str(video_path),
-        "-stream_loop", "-1",
-        "-i", str(bgm_path.resolve()),
+        "ffmpeg",
+        "-y",
+        "-i",
+        str(video_path),
+        "-stream_loop",
+        "-1",
+        "-i",
+        str(bgm_path.resolve()),
         "-filter_complex",
         f"[1:a]"
         f"volume={cfg.bgm_volume},"
@@ -1023,10 +1132,14 @@ def _add_bgm(
         f"afade=t=out:st={dur - cfg.bgm_fade_out}:d={cfg.bgm_fade_out}"
         f"[bgm];"
         f"[0:a][bgm]amix=inputs=2:duration=first:dropout_transition=2",
-        "-c:v", "copy",
-        "-c:a", "aac",
-        "-b:a", "128k",
-        "-movflags", "+faststart",
+        "-c:v",
+        "copy",
+        "-c:a",
+        "aac",
+        "-b:a",
+        "128k",
+        "-movflags",
+        "+faststart",
         "-shortest",
         str(output),
     ]
@@ -1042,11 +1155,12 @@ def _add_bgm(
 
 ASPECT_PRESETS: dict[str, tuple[int, int]] = {
     "16:9": (1920, 1080),
-    "9:16": (1080, 1920),   # TikTok / Reels vertical
-    "1:1":  (1080, 1080),   # Instagram square
-    "4:3":  (1440, 1080),
-    "21:9": (2560, 1080),   # ultrawide cinematic
+    "9:16": (1080, 1920),  # TikTok / Reels vertical
+    "1:1": (1080, 1080),  # Instagram square
+    "4:3": (1440, 1080),
+    "21:9": (2560, 1080),  # ultrawide cinematic
 }
+
 
 def export_crop(
     src: Path,
@@ -1068,16 +1182,26 @@ def export_crop(
 
     tw, th = target
     cmd = [
-        "ffmpeg", "-y",
-        "-i", str(src),
-        "-vf", f"crop=(in_h*{tw}/{th}):in_h:(in_w-in_h*{tw}/{th})/2:0",
-        "-c:v", "libx264",
-        "-preset", "fast",
-        "-crf", "18",
-        "-pix_fmt", "yuv420p",
-        "-c:a", "aac",
-        "-b:a", "128k",
-        "-movflags", "+faststart",
+        "ffmpeg",
+        "-y",
+        "-i",
+        str(src),
+        "-vf",
+        f"crop=(in_h*{tw}/{th}):in_h:(in_w-in_h*{tw}/{th})/2:0",
+        "-c:v",
+        "libx264",
+        "-preset",
+        "fast",
+        "-crf",
+        "18",
+        "-pix_fmt",
+        "yuv420p",
+        "-c:a",
+        "aac",
+        "-b:a",
+        "128k",
+        "-movflags",
+        "+faststart",
         str(dst),
     ]
     _run_ffmpeg(cmd, f"crop to {aspect} ({tw}×{th})", verbose)

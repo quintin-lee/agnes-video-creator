@@ -3,6 +3,7 @@
 A Project wraps a directory containing novel text, per-episode scripts,
 generated assets (images / videos), and the final assembled episodes.
 """
+
 from __future__ import annotations
 
 import json
@@ -14,17 +15,13 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Any
 
 from agnes_video_creator.assembler import assemble_video
 from agnes_video_creator.config import AgnesConfig
 from agnes_video_creator.image_generator import generate_scene_images
 from agnes_video_creator.models import Character, Script
 from agnes_video_creator.novel import analyze_novel
-from agnes_video_creator.script_generator import generate_script
-from agnes_video_creator.utils import json_pretty
 from agnes_video_creator.video_generator import generate_video_clips
-
 
 # ── Episode state machine ──────────────────────────────────────────────
 
@@ -255,10 +252,18 @@ class Project:
                 break
             ep_num = ep["number"]
             if verbose:
-                print(f"\n  Episode {ep_num}/{min(len(episode_list), max_episodes)}...", file=sys.stderr)
+                print(
+                    f"\n  Episode {ep_num}/{min(len(episode_list), max_episodes)}...",
+                    file=sys.stderr,
+                )
 
             ep_script = generate_episode_script(
-                title, ep, chars, text, cfg, verbose=verbose,
+                title,
+                ep,
+                chars,
+                text,
+                cfg,
+                verbose=verbose,
             )
             ep_dir = self._ep_dir(ep_num)
             sp = ep_dir / "script.json"
@@ -329,7 +334,10 @@ class Project:
             if self.preview_storyboard:
                 ep_dir = self._ep_dir(num)
                 storyboard_html = ep_dir / "storyboard.html"
-                from agnes_video_creator.storyboard import generate_storyboard_html, preview_storyboard  # noqa: PLC0415
+                from agnes_video_creator.storyboard import (  # noqa: PLC0415
+                    generate_storyboard_html,
+                )
+
                 generate_storyboard_html(script, storyboard_html)
                 _log(f"\n  [{num}] 📋 Storyboard: {storyboard_html}")
         elif ep.status == "images_ready":
@@ -345,7 +353,10 @@ class Project:
             do_videos = not all(s.is_video_ready for s in script.scenes)
             if do_videos:
                 if verbose:
-                    print(f"\n  [{num}] Generating videos ({len(script.scenes)} scenes)...", file=sys.stderr)
+                    print(
+                        f"\n  [{num}] Generating videos ({len(script.scenes)} scenes)...",
+                        file=sys.stderr,
+                    )
                 script = generate_video_clips(
                     script,
                     cfg=cfg,
@@ -425,7 +436,7 @@ class Project:
         if verbose:
             print(f"  Rendering {len(pending)} episode(s)...", file=sys.stderr)
 
-        cfg = self._build_cfg()
+        self._build_cfg()
 
         if parallel and len(pending) > 1:
             self._render_parallel(
@@ -506,8 +517,7 @@ class Project:
         if verbose:
             with lock:
                 print(
-                    f"  Parallel rendering {len(todo)} episode(s) "
-                    f"with {max_workers} worker(s)...",
+                    f"  Parallel rendering {len(todo)} episode(s) with {max_workers} worker(s)...",
                     file=sys.stderr,
                 )
 
@@ -551,7 +561,9 @@ class Project:
                 "videos_ready": "V",
                 "assembled": "✓",
             }.get(ep.status, "?")
-            lines.append(f"  [{icon}] ep{ep.number:02d}  {ep.title or '(untitled)'}  {ep.status}  {sc_label}")
+            lines.append(
+                f"  [{icon}] ep{ep.number:02d}  {ep.title or '(untitled)'}  {ep.status}  {sc_label}"
+            )
         return "\n".join(lines)
 
 

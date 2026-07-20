@@ -8,7 +8,7 @@ from typing import Any
 
 from agnes_video_creator.config import AgnesConfig
 from agnes_video_creator.models import Scene, Script
-from agnes_video_creator.utils import prepare_prompt, request_json
+from agnes_video_creator.utils import request_json
 
 
 def generate_script(
@@ -37,15 +37,10 @@ def generate_script(
         cfg = AgnesConfig.from_env()
 
     if not cfg.has_api_key:
-        raise SystemExit(
-            "AGNES_API_KEY not set. Export it or pass --api-key."
-        )
+        raise SystemExit("AGNES_API_KEY not set. Export it or pass --api-key.")
 
     # Build the user prompt
-    user_prompt = (
-        f"Topic: {topic}\n"
-        f"Target duration: {target_duration} seconds\n"
-    )
+    user_prompt = f"Topic: {topic}\nTarget duration: {target_duration} seconds\n"
     if style_hint:
         user_prompt += f"Style hint: {style_hint}\n"
     if continuity_info:
@@ -76,10 +71,7 @@ def generate_script(
     content = _extract_content(raw)
     if not content:
         _dump_failure(raw)
-        raise SystemExit(
-            "Script generation returned empty content. "
-            "Check API key and try again."
-        )
+        raise SystemExit("Script generation returned empty content. Check API key and try again.")
 
     parsed = _parse_script_json(content, topic)
     parsed.output_dir = cfg.output_dir
@@ -172,12 +164,12 @@ def _parse_script_json(raw: str, fallback_title: str) -> Script:
         try:
             data = json.loads(repaired)
         except json.JSONDecodeError as exc:
-            # Last resort: try to find a JSON-like block
-            brace_start = cleaned.find("{")
-            brace_end = cleaned.rfind("}")
+            # Last resort: try to find a JSON-like block in repaired text
+            brace_start = repaired.find("{")
+            brace_end = repaired.rfind("}")
             if brace_start != -1 and brace_end > brace_start:
                 try:
-                    data = json.loads(cleaned[brace_start : brace_end + 1])
+                    data = json.loads(repaired[brace_start : brace_end + 1])
                 except json.JSONDecodeError:
                     raise SystemExit(
                         f"Failed to parse script JSON from model output.\n"
@@ -205,7 +197,7 @@ def _parse_script_json(raw: str, fallback_title: str) -> Script:
     ]
 
     return Script(
-        title=data.get("title", fallback_title),
+        title=data.get("title") or fallback_title,
         description=data.get("description", ""),
         total_duration=float(data.get("total_duration", 15)),
         scenes=scenes,

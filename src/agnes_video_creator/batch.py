@@ -12,18 +12,16 @@ Usage
 
 from __future__ import annotations
 
-import json
 import os
 import sqlite3
 import threading
 import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
-
 
 # ── Job types ─────────────────────────────────────────────────────────
 
@@ -82,9 +80,7 @@ class BatchQueue:
     """
 
     def __init__(self, db_path: str = "") -> None:
-        self._db_path = db_path or str(
-            Path.home() / ".agnes-video" / "batch.db"
-        )
+        self._db_path = db_path or str(Path.home() / ".agnes-video" / "batch.db")
         Path(self._db_path).parent.mkdir(parents=True, exist_ok=True)
         self._local = threading.local()
         self._lock = threading.Lock()
@@ -146,8 +142,7 @@ class BatchQueue:
                 """INSERT INTO jobs (id, job_type, project, status, episode_num,
                                      created_at)
                    VALUES (?, ?, ?, ?, ?, ?)""",
-                (job.id, job.job_type, job.project, job.status,
-                 job.episode_num, job.created_at),
+                (job.id, job.job_type, job.project, job.status, job.episode_num, job.created_at),
             )
             conn.commit()
         return job
@@ -212,12 +207,12 @@ class BatchQueue:
             if project:
                 rows = conn.execute(
                     """SELECT * FROM jobs WHERE project = ?
-                       ORDER BY created_at DESC LIMIT ?""",
+                        ORDER BY created_at DESC, rowid DESC LIMIT ?""",
                     (project, limit),
                 ).fetchall()
             else:
                 rows = conn.execute(
-                    """SELECT * FROM jobs ORDER BY created_at DESC LIMIT ?""",
+                    """SELECT * FROM jobs ORDER BY created_at DESC, rowid DESC LIMIT ?""",
                     (limit,),
                 ).fetchall()
             return [self._row_to_job(r) for r in rows]
@@ -225,9 +220,7 @@ class BatchQueue:
     def get_job(self, job_id: str) -> BatchJob | None:
         """Get a single job by ID."""
         with self._lock:
-            row = self._conn().execute(
-                "SELECT * FROM jobs WHERE id = ?", (job_id,)
-            ).fetchone()
+            row = self._conn().execute("SELECT * FROM jobs WHERE id = ?", (job_id,)).fetchone()
             return self._row_to_job(row) if row else None
 
     def count_by_status(self, project: str = "") -> dict[str, int]:
@@ -315,6 +308,7 @@ class BatchWorker:
             if found:
                 # Verify the project name matches (if given)
                 import json
+
                 data = json.loads(found.read_text())
                 if not project_name or data.get("name") == project_name:
                     return found
@@ -349,7 +343,7 @@ class BatchWorker:
             try:
                 job = self._queue.claim_pending()
                 if job is not None:
-                    future = self._executor.submit(self._execute_job, job)
+                    self._executor.submit(self._execute_job, job)
                     # Don't wait — let the executor manage it
                 else:
                     time.sleep(self._poll_interval)
@@ -358,7 +352,7 @@ class BatchWorker:
 
     def _execute_job(self, job: BatchJob) -> None:
         """Execute a single job (runs in worker thread)."""
-        from agnes_video_creator.project import Project, find_project
+        from agnes_video_creator.project import Project
 
         try:
             proj_root = self._resolve_project_root(job.project)
@@ -384,8 +378,8 @@ class BatchWorker:
                 project.analyze_novel(max_episodes=12, verbose=False)
                 project.save()
             elif job.job_type == "check":
-                from agnes_video_creator.consistency import check_script_file
                 from agnes_video_creator.config import AgnesConfig
+                from agnes_video_creator.consistency import check_script_file
 
                 cfg = AgnesConfig()
                 if job.episode_num == 0:
