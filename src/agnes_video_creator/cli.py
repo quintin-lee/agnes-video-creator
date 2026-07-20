@@ -27,7 +27,7 @@ from agnes_video_creator.consistency import check_script_file
 from agnes_video_creator.image_generator import generate_scene_images
 from agnes_video_creator.models import Script
 from agnes_video_creator.novel import novel_to_episodes
-from agnes_video_creator.pipeline_state import PipelineState
+from agnes_video_creator.pipeline_state import EpisodeState, PipelineState, SceneState
 from agnes_video_creator.project import Project, find_project
 from agnes_video_creator.reference import analyze_reference_video, generate_reference_script
 from agnes_video_creator.script_generator import generate_script
@@ -174,11 +174,11 @@ def cmd_create(args: argparse.Namespace) -> None:
             output_dir=str(cfg.resolved_output),
             num_episodes=1,
         )
-    ep = state.episode(1) or PipelineState.EpisodeState(episode_number=1)
+    ep = state.episode(1) or EpisodeState(episode_number=1)
     ep.status = "script_ready"
     ep.script_path = str(script_path)
     ep.scenes = [
-        PipelineState.SceneState(scene_id=s.id) for s in script.scenes
+        SceneState(scene_id=s.id) for s in script.scenes
     ]
     state.upsert_episode(ep)
     state.save(state_path)
@@ -333,10 +333,10 @@ def cmd_ref_create(args: argparse.Namespace) -> None:
             output_dir=str(cfg.resolved_output),
             num_episodes=1,
         )
-    ep = state.episode(1) or PipelineState.EpisodeState(episode_number=1)
+    ep = state.episode(1) or EpisodeState(episode_number=1)
     ep.status = "script_ready"
     ep.script_path = str(script_path)
-    ep.scenes = [PipelineState.SceneState(scene_id=s.id) for s in script.scenes]
+    ep.scenes = [SceneState(scene_id=s.id) for s in script.scenes]
     state.upsert_episode(ep)
     state.save(state_path)
 
@@ -473,13 +473,13 @@ def cmd_novel(args: argparse.Namespace) -> None:
         saved.append(str(ep_path))
 
         # Update pipeline state
-        ep = state.episode(script.episode) or PipelineState.EpisodeState(
+        ep = state.episode(script.episode) or EpisodeState(
             episode_number=script.episode,
         )
         ep.status = "script_ready"
         ep.script_path = str(ep_path)
         ep.scenes = [
-            PipelineState.SceneState(scene_id=s.id) for s in script.scenes
+            SceneState(scene_id=s.id) for s in script.scenes
         ]
         state.upsert_episode(ep)
 
