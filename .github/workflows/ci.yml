@@ -35,6 +35,9 @@ jobs:
       - name: Verify compilation
         run: python -m py_compile src/agnes_video_creator/*.py
 
+      - name: Run tests
+        run: python -m pytest -v --tb=short
+
       - name: Verify imports
         run: |
           python -c "
