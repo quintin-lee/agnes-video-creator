@@ -22,6 +22,7 @@ from typing import Any
 
 from agnes_video_creator.assembler import assemble_video
 from agnes_video_creator.config import AgnesConfig
+from agnes_video_creator.consistency import check_script_file
 from agnes_video_creator.image_generator import generate_scene_images
 from agnes_video_creator.models import Script
 from agnes_video_creator.novel import novel_to_episodes
@@ -514,6 +515,20 @@ def cmd_status(args: argparse.Namespace) -> None:
         )
 
 
+def cmd_check(args: argparse.Namespace) -> None:
+    """Check script(s) for plot and continuity consistency."""
+    cfg = _build_cfg(args)
+    _require_key(cfg)
+
+    report = check_script_file(args.script, cfg=cfg, verbose=not args.quiet)
+    report.print_report()
+    if report.critical_count > 0:
+        raise SystemExit(
+            f"✗ {report.critical_count} critical, "
+            f"{report.warning_count} warning(s) found."
+        )
+
+
 # ── Project commands ──────────────────────────────────────────────────
 
 
@@ -721,6 +736,11 @@ def build_parser() -> argparse.ArgumentParser:
     status = sub.add_parser("status", help="Show script/scene status")
     status.add_argument("script", help="Script JSON file path")
     status.set_defaults(func=cmd_status)
+
+    # ── check ────────────────────────────────────────────────────
+    check = sub.add_parser("check", help="Check script(s) for plot continuity issues")
+    check.add_argument("script", nargs="+", help="Script JSON file path(s)")
+    check.set_defaults(func=cmd_check)
 
     # ── novel ─────────────────────────────────────────────────────
     novel = sub.add_parser("novel", help="Import novel text and generate episode scripts")
