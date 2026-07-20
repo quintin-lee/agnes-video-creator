@@ -30,6 +30,7 @@ def generate_video_clips(
     cfg: AgnesConfig | None = None,
     mode: str = "image-to-video",
     poll: bool = True,
+    scene_ids: set[int] | None = None,
     verbose: bool = True,
 ) -> Script:
     """Generate a video clip for each scene.
@@ -41,6 +42,8 @@ def generate_video_clips(
         - "text-to-video"  : generate from scene.visual_prompt only
         - "image-to-video" : generate from scene.image + visual_prompt (default, best quality)
         - "keyframes"      : animate between consecutive scene images
+    scene_ids : set[int] | None
+        If provided, only generate videos for scenes with these IDs.
     """
     if cfg is None:
         cfg = AgnesConfig.from_env()
@@ -53,9 +56,9 @@ def generate_video_clips(
 
     # ── Support modes ────────────────────────────────────────────
     if mode == "keyframes":
-        _render_keyframes(script, cfg, videos_dir, poll, verbose)
+        _render_keyframes(script, cfg, videos_dir, poll, scene_ids, verbose)
     else:
-        _render_scenes(script, cfg, videos_dir, mode, poll, verbose)
+        _render_scenes(script, cfg, videos_dir, mode, poll, scene_ids, verbose)
 
     return script
 
@@ -94,9 +97,12 @@ def _render_scenes(
     videos_dir: Path,
     mode: str,
     poll: bool,
-    verbose: bool,
+    scene_ids: set[int] | None = None,
+    verbose: bool = True,
 ) -> None:
     for i, scene in enumerate(script.scenes):
+        if scene_ids is not None and scene.id not in scene_ids:
+            continue
         if scene.is_video_ready:
             if verbose:
                 print(
@@ -214,7 +220,8 @@ def _render_keyframes(
     cfg: AgnesConfig,
     videos_dir: Path,
     poll: bool,
-    verbose: bool,
+    scene_ids: set[int] | None = None,
+    verbose: bool = True,
 ) -> None:
     """Generate video by animating between consecutive scene images.
 
@@ -228,12 +235,15 @@ def _render_keyframes(
                 "  Only 1 scene — falling back to image-to-video",
                 file=sys.stderr,
             )
-        _render_scenes(script, cfg, videos_dir, "image-to-video", poll, verbose)
+        _render_scenes(script, cfg, videos_dir, "image-to-video", poll, scene_ids, verbose)
         return
 
     for i in range(len(scenes) - 1):
         scene_a = scenes[i]
         scene_b = scenes[i + 1]
+
+        if scene_ids is not None and scene_a.id not in scene_ids and scene_b.id not in scene_ids:
+            continue
 
         if not scene_a.is_image_ready or not scene_b.is_image_ready:
             if verbose:

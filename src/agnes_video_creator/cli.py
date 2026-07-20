@@ -179,13 +179,27 @@ def cmd_create(args: argparse.Namespace) -> None:
     state.upsert_episode(ep)
     state.save(state_path)
 
+    scene_ids: set[int] | None = None
+    if args.scene:
+        scene_ids = {args.scene}
+        if state is not None:
+            # Reset scene N's state so it gets regenerated
+            for ss in ep.scenes:
+                if ss.scene_id == args.scene:
+                    ss.image = ""
+                    ss.image_url = ""
+                    ss.video = ""
+                    ss.video_url = ""
+            needs_images = True
+            needs_videos = True
+
     # ── Step 2: Scene images ──
     do_images = not args.skip_images and needs_images
     if do_images:
         step += 1
         if not args.quiet:
             print(f"\n=== Step {step}/{total_steps}: Generating scene images ===", file=sys.stderr)
-        script = generate_scene_images(script, cfg=cfg, verbose=not args.quiet)
+        script = generate_scene_images(script, cfg=cfg, scene_ids=scene_ids, verbose=not args.quiet)
         script.save(script_path)
         # Update per-scene state
         for s in script.scenes:
@@ -209,6 +223,7 @@ def cmd_create(args: argparse.Namespace) -> None:
             cfg=cfg,
             mode=_video_mode(args),
             poll=not args.no_poll,
+            scene_ids=scene_ids,
             verbose=not args.quiet,
         )
         script.save(script_path)
@@ -319,13 +334,26 @@ def cmd_ref_create(args: argparse.Namespace) -> None:
     state.upsert_episode(ep)
     state.save(state_path)
 
+    scene_ids: set[int] | None = None
+    if args.scene:
+        scene_ids = {args.scene}
+        if state is not None:
+            for ss in ep.scenes:
+                if ss.scene_id == args.scene:
+                    ss.image = ""
+                    ss.image_url = ""
+                    ss.video = ""
+                    ss.video_url = ""
+            needs_images = True
+            needs_videos = True
+
     # ── Step 2: Scene images ──
     do_images = not args.skip_images and needs_images
     if do_images:
         step += 1
         if not args.quiet:
             print(f"\n=== Step {step}/{total_steps}: Generating scene images ===", file=sys.stderr)
-        script = generate_scene_images(script, cfg=cfg, verbose=not args.quiet)
+        script = generate_scene_images(script, cfg=cfg, scene_ids=scene_ids, verbose=not args.quiet)
         script.save(script_path)
         for s in script.scenes:
             ss = next((x for x in ep.scenes if x.scene_id == s.id), None)
@@ -348,6 +376,7 @@ def cmd_ref_create(args: argparse.Namespace) -> None:
             cfg=cfg,
             mode=_video_mode(args),
             poll=not args.no_poll,
+            scene_ids=scene_ids,
             verbose=not args.quiet,
         )
         script.save(script_path)
@@ -638,6 +667,8 @@ def build_parser() -> argparse.ArgumentParser:
                         help="Resume from existing output directory, skipping completed steps")
     create.add_argument("--no-review", action="store_true",
                         help="Skip the pause-for-review step after script generation")
+    create.add_argument("--scene", type=int, default=0,
+                        help="Only regenerate this specific scene ID (requires --resume)")
     create.add_argument("--skip-images", action="store_true", help="Skip image generation step")
     create.add_argument("--skip-video", action="store_true", help="Skip video generation step")
     create.add_argument("--skip-assembly", action="store_true", help="Skip video assembly step")
@@ -661,6 +692,8 @@ def build_parser() -> argparse.ArgumentParser:
     ref.add_argument("--no-poll", action="store_true", help="Don't poll for video completion")
     ref.add_argument("--resume", "-r", action="store_true",
                      help="Resume from existing output directory, skipping completed steps")
+    ref.add_argument("--scene", type=int, default=0,
+                     help="Only regenerate this specific scene ID (requires --resume)")
     ref.add_argument("--skip-images", action="store_true", help="Skip image generation step")
     ref.add_argument("--skip-video", action="store_true", help="Skip video generation step")
     ref.add_argument("--skip-assembly", action="store_true", help="Skip video assembly step")

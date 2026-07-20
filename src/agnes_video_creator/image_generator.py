@@ -50,6 +50,7 @@ def generate_scene_images(
     *,
     cfg: AgnesConfig | None = None,
     continuity_state: ContinuityState | None = None,
+    scene_ids: set[int] | None = None,
     verbose: bool = True,
 ) -> Script:
     """For each scene in the script, generate a keyframe image.
@@ -60,6 +61,9 @@ def generate_scene_images(
         If provided, injects visual registry context (environments,
         props, outfits) into each scene's visual prompt so new
         generations reuse established visual descriptions.
+    scene_ids : set[int] | None
+        If provided, only generate images for scenes with these IDs.
+        Scenes not in this set are skipped unconditionally.
     """
     # Build visual registry snippet once
     visual_snippet = ""
@@ -81,6 +85,8 @@ def generate_scene_images(
         script.save(str(cfg.resolved_output / "script.json"))
 
     for i, scene in enumerate(script.scenes):
+        if scene_ids is not None and scene.id not in scene_ids:
+            continue
         if scene.is_image_ready:
             if verbose:
                 print(
