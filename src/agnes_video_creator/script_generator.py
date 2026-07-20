@@ -114,6 +114,42 @@ def _dump_failure(data: dict[str, Any]) -> None:
     )
 
 
+def _repair_json(text: str) -> str:
+    """Fix common JSON issues in LLM output so json.loads can parse it.
+
+    Repairs:
+      - Literal newlines/tabs inside JSON strings → escaped \\n, \\t
+      - Otherwise preserves text structure.
+    """
+    chars: list[str] = []
+    in_str = False
+    esc = False
+    for ch in text:
+        if esc:
+            chars.append(ch)
+            esc = False
+            continue
+        if ch == "\\":
+            chars.append(ch)
+            esc = True
+            continue
+        if ch == '"':
+            in_str = not in_str
+            chars.append(ch)
+            continue
+        if in_str and ch == "\n":
+            chars.append("\\n")
+            continue
+        if in_str and ch == "\r":
+            chars.append("\\r")
+            continue
+        if in_str and ch == "\t":
+            chars.append("\\t")
+            continue
+        chars.append(ch)
+    return "".join(chars)
+
+
 def _parse_script_json(raw: str, fallback_title: str) -> Script:
     """Parse the model's JSON output into a Script, with lenient extraction."""
     # Strip markdown fences if present
@@ -131,23 +167,27 @@ def _parse_script_json(raw: str, fallback_title: str) -> Script:
 
     try:
         data: dict[str, Any] = json.loads(cleaned)
-    except json.JSONDecodeError as exc:
-        # Last resort: try to find a JSON-like block
-        brace_start = cleaned.find("{")
-        brace_end = cleaned.rfind("}")
-        if brace_start != -1 and brace_end > brace_start:
-            try:
-                data = json.loads(cleaned[brace_start : brace_end + 1])
-            except json.JSONDecodeError:
+    except json.JSONDecodeError:
+        repaired = _repair_json(cleaned)
+        try:
+            data = json.loads(repaired)
+        except json.JSONDecodeError as exc:
+            # Last resort: try to find a JSON-like block
+            brace_start = cleaned.find("{")
+            brace_end = cleaned.rfind("}")
+            if brace_start != -1 and brace_end > brace_start:
+                try:
+                    data = json.loads(cleaned[brace_start : brace_end + 1])
+                except json.JSONDecodeError:
+                    raise SystemExit(
+                        f"Failed to parse script JSON from model output.\n"
+                        f"JSON error: {exc}\n---output---\n{raw}\n---"
+                    ) from exc
+            else:
                 raise SystemExit(
                     f"Failed to parse script JSON from model output.\n"
                     f"JSON error: {exc}\n---output---\n{raw}\n---"
                 ) from exc
-        else:
-            raise SystemExit(
-                f"Failed to parse script JSON from model output.\n"
-                f"JSON error: {exc}\n---output---\n{raw}\n---"
-            ) from exc
 
     scenes_raw = data.pop("scenes", [])
     scenes = [

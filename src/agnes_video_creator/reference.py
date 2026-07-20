@@ -329,6 +329,37 @@ def analyze_frame_style(
     return parsed
 
 
+def _repair_style_json(text: str) -> str:
+    """Fix literal newlines/tabs inside JSON strings for lenient parsing."""
+    chars: list[str] = []
+    in_str = False
+    esc = False
+    for ch in text:
+        if esc:
+            chars.append(ch)
+            esc = False
+            continue
+        if ch == "\\":
+            chars.append(ch)
+            esc = True
+            continue
+        if ch == '"':
+            in_str = not in_str
+            chars.append(ch)
+            continue
+        if in_str and ch == "\n":
+            chars.append("\\n")
+            continue
+        if in_str and ch == "\r":
+            chars.append("\\r")
+            continue
+        if in_str and ch == "\t":
+            chars.append("\\t")
+            continue
+        chars.append(ch)
+    return "".join(chars)
+
+
 def _parse_style_json(raw: str) -> StyleProfile:
     """Parse the model's JSON output into a StyleProfile."""
     cleaned = raw.strip()
@@ -345,16 +376,19 @@ def _parse_style_json(raw: str) -> StyleProfile:
     try:
         data: dict[str, Any] = json.loads(cleaned)
     except json.JSONDecodeError:
-        # Fallback: find {...} block
-        start = cleaned.find("{")
-        end = cleaned.rfind("}")
-        if start != -1 and end > start:
-            try:
-                data = json.loads(cleaned[start : end + 1])
-            except json.JSONDecodeError:
+        try:
+            data = json.loads(_repair_style_json(cleaned))
+        except json.JSONDecodeError:
+            # Fallback: find {...} block
+            start = cleaned.find("{")
+            end = cleaned.rfind("}")
+            if start != -1 and end > start:
+                try:
+                    data = json.loads(cleaned[start : end + 1])
+                except json.JSONDecodeError:
+                    data = {}
+            else:
                 data = {}
-        else:
-            data = {}
 
     return StyleProfile(data)
 
