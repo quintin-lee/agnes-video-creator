@@ -153,6 +153,8 @@ def cmd_create(args: argparse.Namespace) -> None:
             target_duration=args.duration,
             verbose=not args.quiet,
         )
+        voice_map = _parse_voice_map(getattr(args, "voice_map", None))
+        _apply_voice_map(script, voice_map)
         if not args.no_review:
             _review_script(script)
     elif not args.quiet:
@@ -312,6 +314,8 @@ def cmd_ref_create(args: argparse.Namespace) -> None:
             target_duration=args.duration,
             verbose=not args.quiet,
         )
+        voice_map = _parse_voice_map(getattr(args, "voice_map", None))
+        _apply_voice_map(script, voice_map)
     elif not args.quiet:
         print(f"\n  ✓ Script loaded from disk, skipping.", file=sys.stderr)
 
@@ -455,11 +459,13 @@ def cmd_novel(args: argparse.Namespace) -> None:
     )
 
     cfg.ensure_dirs()
+    voice_map = _parse_voice_map(getattr(args, "voice_map", None))
     saved = []
     for script in scripts:
         if args.episode and script.episode != args.episode:
             continue
 
+        _apply_voice_map(script, voice_map)
         ep_path = cfg.resolved_output / f"episode_{script.episode:02d}.json"
         script.save(ep_path)
         saved.append(str(ep_path))
@@ -667,6 +673,8 @@ def build_parser() -> argparse.ArgumentParser:
                         help="Resume from existing output directory, skipping completed steps")
     create.add_argument("--no-review", action="store_true",
                         help="Skip the pause-for-review step after script generation")
+    create.add_argument("--voice-map",
+                        help="Per-character voice assignment, JSON or key=value pairs (e.g. '{\"林黛玉\":\"zh-CN-XiaoxiaoNeural\"}')")
     create.add_argument("--scene", type=int, default=0,
                         help="Only regenerate this specific scene ID (requires --resume)")
     create.add_argument("--skip-images", action="store_true", help="Skip image generation step")
@@ -692,6 +700,8 @@ def build_parser() -> argparse.ArgumentParser:
     ref.add_argument("--no-poll", action="store_true", help="Don't poll for video completion")
     ref.add_argument("--resume", "-r", action="store_true",
                      help="Resume from existing output directory, skipping completed steps")
+    ref.add_argument("--voice-map",
+                     help="Per-character voice assignment, JSON or key=value pairs")
     ref.add_argument("--scene", type=int, default=0,
                      help="Only regenerate this specific scene ID (requires --resume)")
     ref.add_argument("--skip-images", action="store_true", help="Skip image generation step")
@@ -711,6 +721,8 @@ def build_parser() -> argparse.ArgumentParser:
                        help="Max episodes to generate (default: 4)")
     novel.add_argument("--episode", type=int, default=0,
                        help="Generate only this specific episode number (default: all)")
+    novel.add_argument("--voice-map",
+                       help="Per-character voice assignment, JSON or key=value pairs")
     novel.set_defaults(func=cmd_novel)
 
     # ── project ────────────────────────────────────────────────────
@@ -833,6 +845,45 @@ def _review_script(script: Script) -> None:
 
 def _video_mode(args: argparse.Namespace) -> str:
     return getattr(args, "mode", "image-to-video")
+
+
+def _apply_voice_map(script: Script, voice_map: dict[str, str]) -> None:
+    """Assign edge-tts voices to characters from a name→voice mapping.
+
+    Mutates script.characters in place — sets the ``voice`` field on
+    each Character whose name appears in *voice_map*.
+    """
+    if not voice_map or not script.characters:
+        return
+    for ch in script.characters:
+        if ch.name in voice_map:
+            ch.voice = voice_map[ch.name]
+
+
+def _parse_voice_map(raw: str | None) -> dict[str, str]:
+    """Parse --voice-map into a character-name→voice dict.
+
+    Accepts JSON (``{"林黛玉":"zh-CN-XiaoxiaoNeural"}``) or
+    comma-separated key=value pairs (``林黛玉=zh-CN-XiaoxiaoNeural,贾宝玉=zh-CN-YunxiNeural``).
+    Returns an empty dict when *raw* is empty.
+    """
+    if not raw:
+        return {}
+    raw = raw.strip()
+    # Try JSON first
+    if raw.startswith("{"):
+        try:
+            return json.loads(raw)
+        except json.JSONDecodeError:
+            print("  ⚠ --voice-map JSON parse failed, trying key=value format", file=sys.stderr)
+    # Fallback: comma-separated key=value
+    result: dict[str, str] = {}
+    for pair in raw.split(","):
+        pair = pair.strip()
+        if "=" in pair:
+            k, v = pair.split("=", 1)
+            result[k.strip()] = v.strip()
+    return result
 
 
 # ── Entry point ────────────────────────────────────────────────────────
