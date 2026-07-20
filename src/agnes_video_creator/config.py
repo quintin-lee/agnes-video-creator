@@ -54,6 +54,10 @@ class AgnesConfig:
     add_subtitles: bool = True
     audio_lang: str = "zh"
     tts_voice: str = "zh-CN-XiaoxiaoNeural"
+    subtitle_font: str = ""  # system font path for subtitles (empty = auto-detect CJK)
+    subtitle_size: int = 28  # font size for burned-in subtitles
+    subtitle_color: str = "white"  # font color name or hex for subtitles
+    subtitle_position: str = "bottom"  # bottom / top / middle
     bgm_path: str = ""  # path to background music file (empty = no BGM)
     bgm_volume: float = 0.08  # BGM gain relative to narration (0.08 ≈ -22dB)
     bgm_fade_in: float = 2.0  # fade-in duration for BGM (seconds)
@@ -111,4 +115,8 @@ class AgnesConfig:
             bgm_path=os.environ.get("AGNES_BGM_PATH", ""),
             audio_lang=os.environ.get("AGNES_AUDIO_LANG", "zh"),
             tts_voice=os.environ.get("AGNES_TTS_VOICE", "zh-CN-XiaoxiaoNeural"),
+            subtitle_font=os.environ.get("AGNES_SUBTITLE_FONT", ""),
+            subtitle_size=int(os.environ.get("AGNES_SUBTITLE_SIZE", "28")),
+            subtitle_color=os.environ.get("AGNES_SUBTITLE_COLOR", "white"),
+            subtitle_position=os.environ.get("AGNES_SUBTITLE_POSITION", "bottom"),
         )

@@ -115,6 +115,8 @@ class Scene:
     character_appearances: list[str] = field(default_factory=list)
     dialogues: list[dict] = field(default_factory=list)
     # Each dialogue: {"character": "name", "line": "spoken text"}
+    sfx: str = ""
+    # Sound effect description for this scene, e.g. "wind howling, footsteps on gravel"
 
     @property
     def is_image_ready(self) -> bool:

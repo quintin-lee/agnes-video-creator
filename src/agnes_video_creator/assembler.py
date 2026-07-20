@@ -669,6 +669,65 @@ def _add_narration(
 # ── Subtitles ───────────────────────────────────────────────────────────
 
 
+def _generate_ass(manifest_data: list[dict], cfg: AgnesConfig) -> str:
+    """Generate ASS subtitle content from the audio manifest with styling.
+
+    Uses subtitle font/size/color/position from *cfg*. Font auto-detection
+    falls back to _find_cjk_font when cfg.subtitle_font is empty.
+    """
+    font_path = cfg.subtitle_font or _find_cjk_font()
+    font_name = Path(font_path).stem if font_path else "Arial"
+
+    # Map position to ASS alignment values
+    # 1=bottom-left, 2=bottom-center, 3=bottom-right,
+    # 4=left, 5=center, 6=right,
+    # 7=top-left, 8=top-center, 9=top-right
+    pos_map = {"bottom": 2, "top": 8, "middle": 5}
+    align = pos_map.get(cfg.subtitle_position, 2)
+
+    # ASS header with style definition
+    lines = [
+        "[Script Info]",
+        "ScriptType: v4.00+",
+        "WrapStyle: 0",
+        "ScaledBorderAndShadow: yes",
+        "",
+        "[V4+ Styles]",
+        f"Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding",
+        f"Style: Default,{font_name},{cfg.subtitle_size},&H00FFFFFF,&H000000FF,&H00000000,&H80000000,0,0,0,0,100,100,0,0,1,1,1,{align},20,20,20,1",
+        "",
+        "[Events]",
+        "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text",
+    ]
+
+    seq = 0
+    cursor = 0.0
+
+    def _ts(sec: float) -> str:
+        m, s = divmod(sec, 60)
+        h, m = divmod(m, 60)
+        cs = int((s - int(s)) * 100)
+        return f"{int(h):01d}:{int(m):02d}:{int(s):02d}.{cs:02d}"
+
+    for clip in manifest_data:
+        text = clip.get("text", "")
+        if not text:
+            cursor += clip.get("duration", 0.0)
+            continue
+        dur = clip.get("duration", 2.5)
+        seq += 1
+        start = cursor
+        end = cursor + dur
+        # Escape ASS special characters
+        safe = text.replace("{", "\\{").replace("}", "\\}")
+        lines.append(
+            f"Dialogue: 0,{_ts(start)},{_ts(end)},Default,,0,0,0,,{safe}"
+        )
+        cursor = end
+
+    return "\n".join(lines)
+
+
 def _generate_srt(manifest_data: list[dict]) -> str:
     """Generate SRT subtitle content from the audio manifest.
 
@@ -710,31 +769,32 @@ def _burn_subtitles(
     cfg: AgnesConfig,
     verbose: bool,
 ) -> Path:
-    """Burn subtitles (SRT) into the video.
+    """Burn subtitles into the video using ASS format for styled output.
 
     Falls back to the original video if ffmpeg fails or no text found.
+    Uses ASS for coloured, positioned subtitles; falls back to SRT if
+    the ASS approach fails.
     """
     if not manifest_data:
         return video_path
 
-    srt_content = _generate_srt(manifest_data)
-    if not srt_content.strip():
+    ass_content = _generate_ass(manifest_data, cfg)
+    if not ass_content.strip():
         return video_path
 
-    srt_path = temp_dir / "subtitles.srt"
-    srt_path.write_text(srt_content, encoding="utf-8")
+    sub_path = temp_dir / "subtitles.ass"
+    sub_path.write_text(ass_content, encoding="utf-8")
 
-    # Escape path for ffmpeg subtitles filter (colons and quotes)
-    srt_escaped = str(srt_path).replace("\\", "/").replace(":", "\\:")
-    # Wrap in single quotes if path contains spaces
-    if " " in srt_escaped:
-        srt_escaped = f"'\\''{srt_escaped}'\\''"
+    # Escape path for ffmpeg subtitles filter
+    sub_escaped = str(sub_path).replace("\\", "/").replace(":", "\\:")
+    if " " in sub_escaped:
+        sub_escaped = f"'\\''{sub_escaped}'\\''"
 
     output = temp_dir / "with_subs.mp4"
     cmd = [
         "ffmpeg", "-y",
         "-i", str(video_path),
-        "-vf", f"subtitles={srt_escaped}",
+        "-vf", f"subtitles={sub_escaped}",
         "-c:a", "copy",
         "-c:v", "libx264",
         "-preset", "fast",

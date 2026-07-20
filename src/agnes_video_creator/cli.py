@@ -675,6 +675,10 @@ def build_parser() -> argparse.ArgumentParser:
                         help="Skip the pause-for-review step after script generation")
     create.add_argument("--voice-map",
                         help="Per-character voice assignment, JSON or key=value pairs (e.g. '{\"林黛玉\":\"zh-CN-XiaoxiaoNeural\"}')")
+    create.add_argument("--subtitle-font", help="System font path for subtitles (default: auto-detect CJK)")
+    create.add_argument("--subtitle-size", type=int, default=0, help="Subtitle font size (default: 28)")
+    create.add_argument("--subtitle-color", help="Subtitle font color (default: white)")
+    create.add_argument("--subtitle-position", choices=("bottom", "top", "middle"), help="Subtitle vertical position (default: bottom)")
     create.add_argument("--scene", type=int, default=0,
                         help="Only regenerate this specific scene ID (requires --resume)")
     create.add_argument("--skip-images", action="store_true", help="Skip image generation step")
@@ -702,6 +706,10 @@ def build_parser() -> argparse.ArgumentParser:
                      help="Resume from existing output directory, skipping completed steps")
     ref.add_argument("--voice-map",
                      help="Per-character voice assignment, JSON or key=value pairs")
+    ref.add_argument("--subtitle-font", help="System font path for subtitles (default: auto-detect CJK)")
+    ref.add_argument("--subtitle-size", type=int, default=0, help="Subtitle font size (default: 28)")
+    ref.add_argument("--subtitle-color", help="Subtitle font color (default: white)")
+    ref.add_argument("--subtitle-position", choices=("bottom", "top", "middle"), help="Subtitle vertical position (default: bottom)")
     ref.add_argument("--scene", type=int, default=0,
                      help="Only regenerate this specific scene ID (requires --resume)")
     ref.add_argument("--skip-images", action="store_true", help="Skip image generation step")
@@ -790,6 +798,14 @@ def _build_cfg(args: argparse.Namespace) -> AgnesConfig:
         cfg.api_key = args.api_key
     if getattr(args, "output_dir", None):
         cfg.output_dir = args.output_dir
+    if getattr(args, "subtitle_font", None):
+        cfg.subtitle_font = args.subtitle_font
+    if getattr(args, "subtitle_size", 0):
+        cfg.subtitle_size = args.subtitle_size
+    if getattr(args, "subtitle_color", None):
+        cfg.subtitle_color = args.subtitle_color
+    if getattr(args, "subtitle_position", None):
+        cfg.subtitle_position = args.subtitle_position
     return cfg
 
 
