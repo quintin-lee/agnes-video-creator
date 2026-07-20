@@ -624,6 +624,10 @@ def create_app() -> FastAPI:
             raise HTTPException(404, f"Episode {num} script not found")
 
         cfg = AgnesConfig()
+        if not cfg.has_api_key:
+            raise HTTPException(400,
+                "AGNES_API_KEY not set. Set the environment variable or pass --api-key.")
+
         report = check_script_file(ep_info.script_path, cfg=cfg, verbose=False)
 
         return {
@@ -659,6 +663,10 @@ def create_app() -> FastAPI:
         total_warnings = 0
 
         cfg = AgnesConfig()
+        if not cfg.has_api_key:
+            raise HTTPException(400,
+                "AGNES_API_KEY not set. Set the environment variable or pass --api-key.")
+
         for ep in project.episodes:
             if not ep.script_path or not Path(ep.script_path).exists():
                 continue
