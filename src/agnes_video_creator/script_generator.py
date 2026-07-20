@@ -18,6 +18,7 @@ def generate_script(
     style_hint: str = "",
     target_duration: float = 15.0,
     character_info: str = "",
+    continuity_info: str = "",
     verbose: bool = True,
 ) -> Script:
     """Generate a complete video script from a topic description.
@@ -27,6 +28,10 @@ def generate_script(
     character_info : str
         If non-empty, the system prompt includes character descriptions
         and per-scene character_appearances tracking.
+    continuity_info : str
+        Cross-episode continuity context (character state, visual
+        registry, plot threads, previous summary) injected into the
+        user prompt so the LLM builds on prior episodes.
     """
     if cfg is None:
         cfg = AgnesConfig.from_env()
@@ -43,6 +48,8 @@ def generate_script(
     )
     if style_hint:
         user_prompt += f"Style hint: {style_hint}\n"
+    if continuity_info:
+        user_prompt += f"\nPrevious episode continuity:\n{continuity_info}\n"
 
     if verbose:
         print(f"  Generating script for: {topic}", file=sys.stderr)
@@ -52,7 +59,13 @@ def generate_script(
     payload = {
         "model": cfg.text_model,
         "messages": [
-            {"role": "system", "content": Script.generate_system_prompt(character_info=character_info)},
+            {
+                "role": "system",
+                "content": Script.generate_system_prompt(
+                    character_info=character_info,
+                    need_continuity_updates=bool(continuity_info),
+                ),
+            },
             {"role": "user", "content": user_prompt},
         ],
         "temperature": cfg.text_temperature,

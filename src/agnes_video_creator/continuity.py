@@ -140,3 +140,33 @@ class ContinuityState:
         obj.visual.props = dict(vis.get("props", {}))
         obj.visual.outfits = dict(vis.get("outfits", {}))
         return obj
+
+    def apply_visual_updates(self, updates: dict[str, str]) -> None:
+        """Apply Script.visual_updates to this continuity state."""
+        for key, value in updates.items():
+            if key == "summary":
+                self.prev_summary = value
+            elif key.startswith("environment:"):
+                self.visual.environments[key[len("environment:"):]] = value
+            elif key.startswith("env:"):
+                self.visual.environments[key[len("env:"):]] = value
+            elif key.startswith("outfit:"):
+                self.visual.outfits[key[len("outfit:"):]] = value
+            elif key.startswith("prop:"):
+                self.visual.props[key[len("prop:"):]] = value
+            elif key.startswith("plot:"):
+                thread = key[len("plot:"):]
+                if value and thread not in self.plot_threads:
+                    self.plot_threads.append(f"{thread}: {value}")
+            elif key.startswith("emotion:"):
+                char_name = key[len("emotion:"):]
+                self.ensure_character(char_name).emotional_state = value
+            elif key.startswith("location:"):
+                char_name = key[len("location:"):]
+                self.ensure_character(char_name).location = value
+            elif key.startswith("notes:"):
+                char_name = key[len("notes:"):]
+                self.ensure_character(char_name).notes = value
+            elif ":" in key:
+                prefix, rest = key.split(":", 1)
+                self.visual.environments[key] = value

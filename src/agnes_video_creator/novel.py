@@ -2,21 +2,195 @@
 
 Pipeline:
   1. Read novel text from file.
-  2. Call Agnes 2.0 Flash to extract characters + episode breakdown.
-  3. For each episode, generate a full Script via the existing script_generator.
-  4. Save per-episode Script JSONs in the output directory.
+  2. Split into intelligently-sized chunks with summaries (chunk_novel).
+  3. Call Agnes 2.0 Flash to extract characters + episode breakdown.
+  4. For each episode, generate a full Script via the existing script_generator,
+     using the full relevant chunk + continuity state from prior episodes.
+  5. Extract dialogue lines from the chunk so the script uses novel-original lines.
+  6. Save per-episode Script JSONs in the output directory.
 """
 
 from __future__ import annotations
 
 import json
+import re
 import sys
+from dataclasses import dataclass, field
 from typing import Any
 
 from agnes_video_creator.config import AgnesConfig
+from agnes_video_creator.continuity import ContinuityState
 from agnes_video_creator.models import Character, Script
 from agnes_video_creator.script_generator import generate_script
 from agnes_video_creator.utils import request_json
+
+
+# ── Novel chunking ─────────────────────────────────────────────────────
+
+
+@dataclass
+class NovelChunk:
+    """A segment of novel text with metadata for one episode."""
+
+    index: int
+    text: str
+    title: str = ""
+    summary: str = ""
+    characters: list[str] = field(default_factory=list)
+
+
+# Chapter heading patterns tried in order
+_CHAPTER_RE = re.compile(
+    r"^(?:第[一二三四五六七八九十百千\d]+[回章节集])"
+    r"|(?:Chapter\s+\d+)"
+    r"|(?:CHAPTER\s+\d+)"
+    r"|(?:#+\s*\S+)",
+    re.MULTILINE,
+)
+
+
+def chunk_novel(
+    text: str,
+    *,
+    max_chunk_len: int = 4000,
+    verbose: bool = True,
+) -> list[NovelChunk]:
+    """Split novel text into intelligently-sized chunks for episode generation.
+
+    Strategy:
+    1. Try chapter markers first ("第X回", "Chapter X", "### heading").
+    2. Merge very small adjacent chunks; split oversized ones by paragraph.
+    3. Generate a title and summary for each chunk.
+    """
+    raw_chunks = _split_by_chapters(text)
+
+    # Merge adjacent tiny chunks; split oversized ones
+    merged: list[NovelChunk] = []
+    buf = ""
+    buf_idx = 0
+    for i, (heading, body) in enumerate(raw_chunks):
+        segment = f"{heading}\n\n{body}" if heading else body
+        if buf and len(buf) + len(segment) > max_chunk_len:
+            merged.append(NovelChunk(index=buf_idx, text=buf))
+            buf_idx += 1
+            buf = segment
+        elif buf:
+            buf += "\n\n" + segment
+        else:
+            buf = segment
+
+        # If this segment alone is oversized, flush and split
+        while len(buf) > max_chunk_len:
+            merged.append(NovelChunk(index=buf_idx, text=buf[:max_chunk_len]))
+            buf_idx += 1
+            buf = buf[max_chunk_len:]
+
+    if buf:
+        merged.append(NovelChunk(index=buf_idx, text=buf))
+
+    # Assign titles and summaries
+    for chunk in merged:
+        chunk.title = _infer_chunk_title(chunk.text, raw_chunks)
+        chunk.summary = chunk.text[:200].replace("\n", " ").strip()
+        if len(chunk.text) > 200:
+            chunk.summary += "…"
+
+    if verbose:
+        total = sum(len(c.text) for c in merged)
+        print(
+            f"  Novel split into {len(merged)} chunk(s) "
+            f"({total:,} total chars, ~{total // max(1, len(merged)):,} avg)",
+            file=sys.stderr,
+        )
+        for c in merged:
+            print(f"    [{c.index}] {c.title or '(untitled)'}: {len(c.text):,} chars",
+                  file=sys.stderr)
+
+    return merged
+
+
+def _split_by_chapters(text: str) -> list[tuple[str, str]]:
+    """Split text at chapter boundaries. Returns [(heading, body), ...]."""
+    matches = list(_CHAPTER_RE.finditer(text))
+    if not matches:
+        return [("", text)]
+
+    chunks: list[tuple[str, str]] = []
+    for i, m in enumerate(matches):
+        start = m.start()
+        heading = m.group().strip()
+        end = matches[i + 1].start() if i + 1 < len(matches) else len(text)
+        body = text[m.end() : end].strip()
+        chunks.append((heading, body))
+    return chunks
+
+
+def _infer_chunk_title(text: str, raw_chunks: list[tuple[str, str]]) -> str:
+    """Extract a human-readable title for a chunk."""
+    # Check if this chunk starts with a chapter heading
+    for heading, body in raw_chunks:
+        if heading and body and body[: min(len(text), 200)] in text:
+            return heading
+    # Fallback: use first meaningful line
+    for line in text.split("\n")[:5]:
+        stripped = line.strip()
+        if stripped and len(stripped) > 4 and len(stripped) < 100:
+            return stripped
+    return ""
+
+
+# ── Dialogue extraction ────────────────────────────────────────────────
+
+# Chinese dialogue patterns:
+#   "A说："..."   "A道："..."   "A对B说："..."
+# Speech verbs shared by both dialogue patterns.
+_DIALOGUE_VERBS = (
+    "说道|问道|答道|叫道|喊道|骂道|叹道|笑道|哭道|叹道|回道|"
+    "回答道|解释道|补充道|打断道|提醒道|抢白道|自言自语道|接口道|"
+    "劝道|低声道|大声道|柔声道|厉声道|沉声道|颤声道|"
+    "笑说|哭着说|解说|"
+    "说|道|问|答|叫|喊|骂|叹|笑|念|哭|嚷|回|喝|吟|劝"
+)
+
+# Pattern 1: 「A笑道：」"dialogue" — character name + speech verb + colon + quoted text
+_DIALOGUE_RE = re.compile(
+    rf'([\u4e00-\u9fff]{{2,4}}?)'
+    rf'(?:{_DIALOGUE_VERBS})'
+    rf'[：:][\u201c"]([^\u201c"\u201d]+)[\u201d"]'
+)
+# Pattern 2: 「dialogue」A笑道。 (angle-quoted speech followed by speaker + verb)
+_ANGLE_DIALOGUE_RE = re.compile(
+    rf'\u300c([^\u300d]+)\u300d'
+    rf'([\u4e00-\u9fff]{{2,4}}?)'
+    rf'(?:{_DIALOGUE_VERBS})'
+)
+
+
+def extract_dialogues(
+    text: str,
+    characters: list[Character],
+) -> list[dict[str, str]]:
+    """Extract dialogue lines from novel text that belong to known characters.
+
+    Returns a list of {"character": name, "line": spoken_text} dicts
+    preserving the order they appear in the source text.
+    """
+    char_names = {c.name for c in characters}
+    results: list[dict[str, str]] = []
+
+    for m in _DIALOGUE_RE.finditer(text):
+        name = m.group(1).strip()
+        line = m.group(2).strip()
+        if name in char_names and line:
+            results.append({"character": name, "line": line})
+
+    for m in _ANGLE_DIALOGUE_RE.finditer(text):
+        line = m.group(1).strip()
+        name = m.group(2).strip()
+        if name in char_names and line:
+            results.append({"character": name, "line": line})
+
+    return results
 
 
 # ── Character + episode extraction ─────────────────────────────────────
@@ -105,6 +279,9 @@ def generate_episode_script(
     novel_text: str,
     cfg: AgnesConfig,
     *,
+    continuity_state: ContinuityState | None = None,
+    episode_number: int = 1,
+    total_episodes: int = 1,
     verbose: bool = True,
 ) -> Script:
     """Generate a full Script for one episode using the existing pipeline."""
@@ -116,11 +293,23 @@ def generate_episode_script(
     # Use generate_script with character_info for consistency
     topic = (
         f"Novel: {title}\n"
-        f"Episode {episode['number']}: {episode.get('title', '')}\n"
+        f"Episode {episode_number} of {total_episodes}: {episode.get('title', '')}\n"
         f"Summary: {episode.get('summary', '')}\n"
         f"Characters appearing: {', '.join(episode.get('character_focus', []))}\n\n"
         f"Novel excerpt:\n{novel_text[:2000]}"
     )
+
+    # Build continuity info for this episode
+    continuity_info = ""
+    if continuity_state is not None:
+        continuity_state.episode = episode_number
+        snippet = continuity_state.to_prompt_snippet()
+        if snippet:
+            continuity_info = (
+                f"这是第 {episode_number}/{total_episodes} 集。"
+                f"请基于下文生成本集脚本，并保持与前集的一致性。\n\n"
+                f"{snippet}"
+            )
 
     style_hint = episode.get("style_hint", "cinematic short drama, Chinese style")
 
@@ -130,13 +319,14 @@ def generate_episode_script(
         style_hint=style_hint,
         target_duration=30.0,
         character_info=char_info,
+        continuity_info=continuity_info,
         verbose=verbose,
     )
 
     # Attach character data and episode number to the script
-    script.title = f"{title} 第{episode['number']}集"
+    script.title = f"{title} 第{episode_number}集"
     script.characters = characters
-    script.episode = episode["number"]
+    script.episode = episode_number
 
     return script
 
@@ -151,17 +341,56 @@ def novel_to_episodes(
     max_episodes: int = 4,
     verbose: bool = True,
 ) -> list[Script]:
-    """Full pipeline: analyze novel, generate one script per episode."""
-    title, characters, episodes, remaining = analyze_novel(text, cfg, verbose=verbose)
+    """Full pipeline: chunk novel, generate one script per chunk with
+    cross-episode continuity tracking."""
+    chunks = chunk_novel(text, verbose=verbose)
+    if not chunks:
+        raise SystemExit("Novel produced no chunks.")
+
+    # Analyze the first chunk for overall story metadata
+    first_chunk = chunks[0]
+    title, characters, episodes, remaining = analyze_novel(
+        first_chunk.text, cfg, verbose=verbose,
+    )
+
+    total = min(len(chunks), max_episodes)
+    if verbose:
+        print(f"\n  Generating {total} episode(s) from {len(chunks)} chunk(s) "
+              f"with continuity tracking.", file=sys.stderr)
+
+    # Initialize continuity state
+    continuity = ContinuityState()
 
     scripts: list[Script] = []
-    for i, ep in enumerate(episodes[:max_episodes]):
+    for i in range(total):
+        chunk = chunks[i]
+        ep = episodes[i] if i < len(episodes) else {
+            "number": i + 1,
+            "title": f"第{i+1}集",
+            "summary": chunk.summary,
+            "character_focus": [c.name for c in characters],
+        }
+
         if verbose:
-            print(f"\n--- Episode {ep['number']}: {ep.get('title', '')} ---",
+            print(f"\n--- Episode {i+1}: {ep.get('title', '')} ---",
                   file=sys.stderr)
+
         script = generate_episode_script(
-            title, ep, characters, text, cfg, verbose=verbose,
+            title,
+            ep,
+            characters,
+            chunk.text,
+            cfg,
+            continuity_state=continuity,
+            episode_number=i + 1,
+            total_episodes=total,
+            verbose=verbose,
         )
+
+        # Apply visual_updates from this script into continuity state
+        if script.visual_updates:
+            continuity.apply_visual_updates(script.visual_updates)
+
         scripts.append(script)
 
     return scripts

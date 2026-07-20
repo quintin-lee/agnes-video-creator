@@ -196,6 +196,7 @@ class Script:
     @staticmethod
     def generate_system_prompt(
         character_info: str = "",
+        need_continuity_updates: bool = False,
     ) -> str:
         """Generate the system prompt for script generation.
 
@@ -204,10 +205,15 @@ class Script:
         character_info : str
             If non-empty, injected into the prompt so the model generates
             character-aware scenes with character_appearances per scene.
+        need_continuity_updates : bool
+            If True, adds a visual_updates field so the model reports
+            cross-episode continuity changes.
         """
         char_section = ""
         dialogue_field = ""
         narration_hint = ""
+        continuity_field = ""
+        continuity_rule = ""
         if character_info:
             char_section = f"""
 Known characters:
@@ -220,6 +226,20 @@ For each scene, include a "character_appearances" field listing which characters
         {"character": "另一个角色", "line": "their reply in Chinese"}
       ],"""
             narration_hint = ", or leave empty if dialogues cover it"
+        if need_continuity_updates:
+            continuity_field = """
+  "visual_updates": {
+    "key": "value"
+  },
+  /* Report visual changes from this episode as key-value pairs:
+       "environment:name" -> "detailed visual description of new environment"
+       "outfit:林黛玉"    -> "new outfit description for character"
+       "prop:name"       -> "prop description"
+     Only include items that are NEW or CHANGED this episode.
+     Omit this field if nothing changed. */"""
+            continuity_rule = """
+- When the user provides "Previous episode continuity", respect the existing visual registry and character states. Only describe NEW environments, changed outfits, or newly introduced props in "visual_updates". Reuse existing environment/prop/outfit descriptions in scene prompts instead of inventing new ones.
+"""
         return f"""You are a professional short-video scriptwriter. Given a topic, produce a detailed storyboard.
 
 Output **only** valid JSON with this exact structure — no markdown fences, no commentary:
@@ -230,7 +250,7 @@ Output **only** valid JSON with this exact structure — no markdown fences, no 
   "total_duration": 15.0,
   "style_guide": "Visual style guide (in Chinese)",
   "mood": "Overall mood/tone (in Chinese)",
-  "target_audience": "Who this is for (in Chinese)",{char_section}
+  "target_audience": "Who this is for (in Chinese)",{char_section}{continuity_field}
   "scenes": [
     {{
       "id": 1,
@@ -251,4 +271,4 @@ Rules:
 - **camera** field describes camera motion per scene, e.g. "缓慢推近" (slow zoom in), "向右平移" (pan right), "跟拍" (tracking), "手持晃动" (handheld), "航拍俯视" (aerial), "特写推近" (close-up dolly). Be specific.
 - **visual_prompt** MUST be a detailed English prompt suitable for image-to-video generation (subject, action, environment, lighting, camera motion, style). When characters appear, describe them in the visual_prompt as directed by their appearance.
 - When characters are provided, include **dialogues** for character interactions — each line spoken by a character in Chinese.
-- The JSON must be parseable as-is with json.loads()."""
+- The JSON must be parseable as-is with json.loads().{continuity_rule}"""

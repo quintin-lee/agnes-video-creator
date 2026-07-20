@@ -10,6 +10,7 @@ import sys
 from typing import Any
 
 from agnes_video_creator.config import AgnesConfig
+from agnes_video_creator.continuity import ContinuityState
 from agnes_video_creator.models import Character, Script
 from agnes_video_creator.portraits import generate_character_portraits
 from agnes_video_creator.utils import (
@@ -48,13 +49,23 @@ def generate_scene_images(
     script: Script,
     *,
     cfg: AgnesConfig | None = None,
+    continuity_state: ContinuityState | None = None,
     verbose: bool = True,
 ) -> Script:
     """For each scene in the script, generate a keyframe image.
 
-    Each generated image URL is stored back on the Scene object,
-    and the image is downloaded locally.
+    Parameters
+    ----------
+    continuity_state : ContinuityState | None
+        If provided, injects visual registry context (environments,
+        props, outfits) into each scene's visual prompt so new
+        generations reuse established visual descriptions.
     """
+    # Build visual registry snippet once
+    visual_snippet = ""
+    if continuity_state is not None and continuity_state.visual.is_populated():
+        visual_snippet = continuity_state.visual.to_prompt_snippet()
+    # 
     if cfg is None:
         cfg = AgnesConfig.from_env()
     if not cfg.has_api_key:
@@ -84,8 +95,13 @@ def generate_scene_images(
                 file=sys.stderr,
             )
 
+        # Start with scene's visual prompt
+        base = scene.visual_prompt
+        # Prepend visual registry context (environments, props, outfits)
+        if visual_snippet:
+            base = f"Known references:\n{visual_snippet}\n\nScene: {base}"
         enriched = _inject_face_features(
-            scene.visual_prompt, scene.character_appearances, script
+            base, scene.character_appearances, script
         )
         final_prompt, orig = prepare_prompt(enriched, cfg)
         if orig and verbose:
