@@ -14,13 +14,16 @@ keywords = ["agnes", "video-generation", "ai", "cli"]
 [project.optional-dependencies]
 web = ["fastapi", "uvicorn>=0.30", "pydantic"]
 tts = ["edge-tts"]
-dev = ["ruff"]
+dev = ["ruff", "pytest"]
 
 [project.scripts]
 agnes-video = "agnes_video_creator.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
 
 [tool.ruff]
 target-version = "py310"
