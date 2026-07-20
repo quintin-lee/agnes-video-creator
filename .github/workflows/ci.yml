@@ -1,0 +1,63 @@
+name: CI
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+    branches: [master, main]
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.10", "3.11", "3.12"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install project with dev deps
+        run: |
+          pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      - name: Lint with ruff
+        run: ruff check src/ --output-format github
+
+      - name: Check formatting with ruff
+        run: ruff format src/ --check
+
+      - name: Verify compilation
+        run: python -m py_compile src/agnes_video_creator/*.py
+
+      - name: Verify imports
+        run: python -c "
+        import sys; sys.path.insert(0, 'src')
+        for m in [
+          'agnes_video_creator.models',
+          'agnes_video_creator.config',
+          'agnes_video_creator.utils',
+          'agnes_video_creator.cost_estimator',
+          'agnes_video_creator.reference',
+          'agnes_video_creator.script_generator',
+          'agnes_video_creator.image_generator',
+          'agnes_video_creator.video_generator',
+          'agnes_video_creator.assembler',
+          'agnes_video_creator.consistency',
+          'agnes_video_creator.continuity',
+          'agnes_video_creator.pipeline_state',
+          'agnes_video_creator.portraits',
+          'agnes_video_creator.face_analyzer',
+          'agnes_video_creator.project',
+          'agnes_video_creator.novel',
+          'agnes_video_creator.storyboard',
+          'agnes_video_creator.batch',
+        ]:
+          __import__(m); print(f'  \u2713 {m}')
+        print('All imports OK')
+        "

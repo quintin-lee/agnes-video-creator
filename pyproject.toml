@@ -5,17 +5,30 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "agnes-video-creator"
 version = "0.1.0"
-description = "Automatic short-video generation CLI powered by Agnes AI APIs"
+description = "Automatic short-video generation CLI powered by Agnes AI APIs, with novel-to-drama pipeline"
 readme = "README.md"
 requires-python = ">=3.10"
 license = {text = "MIT"}
 keywords = ["agnes", "video-generation", "ai", "cli"]
-dependencies = []
+
 [project.optional-dependencies]
-web = ["fastapi", "uvicorn"]
+web = ["fastapi", "uvicorn>=0.30", "pydantic"]
+tts = ["edge-tts"]
+dev = ["ruff"]
 
 [project.scripts]
 agnes-video = "agnes_video_creator.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.ruff]
+target-version = "py310"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "N", "UP", "B", "SIM"]
+
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["F401"]
+"cli.py" = ["N815"]  # argparse internals use lowercase_const_names
