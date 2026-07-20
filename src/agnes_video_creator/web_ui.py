@@ -229,6 +229,17 @@ def create_app() -> FastAPI:
     if _STATIC.exists():
         app.mount("/static", StaticFiles(directory=str(_STATIC)), name="static")
 
+    # ── API: Server status ──────────────────────────────────────────
+
+    @app.get("/api/status")
+    def server_status():
+        """Return server status including API key configuration."""
+        cfg = AgnesConfig()
+        return {
+            "api_key_configured": cfg.has_api_key,
+            "projects_dir": str(_projects_dir().resolve()),
+        }
+
     # ── API: Project list / create ──────────────────────────────────
 
     @app.get("/api/projects")
