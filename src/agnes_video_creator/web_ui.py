@@ -260,7 +260,7 @@ def create_app() -> FastAPI:
             raw = await request.json()
             body = _Body(**raw)
         except Exception as e:
-            raise HTTPException(422, f"Invalid request body: {e}")
+            raise HTTPException(422, f"Invalid request body: {e}") from e
 
         novel = Path(body.novel_path).resolve() if body.novel_path else ""
         if body.novel_path and not Path(body.novel_path).exists():
@@ -295,7 +295,7 @@ def create_app() -> FastAPI:
         try:
             project = Project.load(proj_file)
         except Exception as e:
-            raise HTTPException(500, f"Failed to load project: {e}")
+            raise HTTPException(500, f"Failed to load project: {e}") from e
 
         has_novel = bool(project.novel_path and Path(project.novel_path).exists())
         with _lock:
@@ -422,7 +422,7 @@ def create_app() -> FastAPI:
         try:
             body = await request.json()
         except Exception:
-            raise HTTPException(422, "Invalid JSON body")
+            raise HTTPException(422, "Invalid JSON body") from None
 
         aspect = str(body.get("aspect", "9:16"))
         if aspect not in ("16:9", "9:16", "1:1", "4:3", "21:9"):
@@ -548,7 +548,7 @@ def create_app() -> FastAPI:
                         }
                     )
             except Exception as e:
-                raise HTTPException(500, f"Failed to load script: {e}")
+                raise HTTPException(500, f"Failed to load script: {e}") from e
 
         with _lock:
             run_key = f"{name}__render_ep{num}"
@@ -654,7 +654,7 @@ def create_app() -> FastAPI:
         try:
             body = await request.json()
         except Exception:
-            raise HTTPException(422, "Invalid JSON body")
+            raise HTTPException(422, "Invalid JSON body") from None
 
         changed = False
         for field in ("narration", "visual_prompt", "duration_seconds", "camera", "style"):
@@ -694,7 +694,7 @@ def create_app() -> FastAPI:
         try:
             body = await request.json()
         except Exception:
-            raise HTTPException(422, "Invalid JSON body")
+            raise HTTPException(422, "Invalid JSON body") from None
 
         trim_in = float(body.get("trim_in", 0))
         trim_out = float(body.get("trim_out", 0))
@@ -725,7 +725,7 @@ def create_app() -> FastAPI:
         try:
             body = await request.json()
         except Exception:
-            raise HTTPException(422, "Invalid JSON body")
+            raise HTTPException(422, "Invalid JSON body") from None
 
         voice_map: dict[str, str] = body.get("voice_map", {})
         if not isinstance(voice_map, dict) or not voice_map:
@@ -785,7 +785,7 @@ def create_app() -> FastAPI:
         try:
             body = await request.json()
         except Exception:
-            raise HTTPException(422, "Invalid JSON body")
+            raise HTTPException(422, "Invalid JSON body") from None
 
         updates: list[dict] = body.get("characters", [])
         if not updates:
@@ -928,7 +928,7 @@ def create_app() -> FastAPI:
             await asyncio.sleep(0.1)
         else:
             # Check if the log key might have __analyze or __render suffix
-            for actual_key, log in _logs.items():
+            for actual_key, _log in _logs.items():
                 if actual_key.startswith(key):
                     key = actual_key
                     break
@@ -968,7 +968,7 @@ def create_app() -> FastAPI:
             project = raw.get("project", "")
             episode_num = int(raw.get("episode", 0))
         except Exception:
-            raise HTTPException(422, "Invalid request body. Requires: job_type, project")
+            raise HTTPException(422, "Invalid request body. Requires: job_type, project") from None
 
         q = get_queue()
         job = q.submit(job_type, project=project, episode_num=episode_num)

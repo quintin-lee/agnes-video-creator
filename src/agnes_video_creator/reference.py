@@ -246,14 +246,23 @@ Analyze the provided video frame(s) and extract the visual style.
 Output **only** valid JSON — no markdown fences, no commentary:
 
 {
-  "style_label": "One or two words describing the overall style (e.g. cinematic, documentary, anime, vintage, noir, sci-fi, minimalist)",
-  "color_palette": "Describe the dominant colors, contrast, saturation (e.g. warm amber and teal with high contrast, desaturated earth tones, vibrant neon on dark backgrounds)",
-  "lighting": "Describe the lighting setup (e.g. natural golden hour, hard dramatic key light with deep shadows, soft diffused overhead, neon practicals)",
-  "camera_style": "Describe camera movement and angle (e.g. slow tracking shots with shallow DOF, static wide establishing shots, handheld documentary style, low-angle dramatic push-ins)",
-  "composition": "Describe framing and composition patterns (e.g. rule of thirds with leading lines, centered symmetrical, extreme close-ups, negative space)",
-  "mood": "One sentence on emotional tone (e.g. melancholic and contemplative, energetic and urgent, calm and meditative)",
-  "scene_type": "Type of scene / genre context (e.g. urban night exterior, indoor interview, nature landscape, product close-up)",
-  "motion_character": "Describe the motion feel (e.g. slow and fluid, quick cuts with fast camera whip-pans, gentle floating, locked-off static)",
+  "style_label": "One or two words describing the overall style (e.g. cinematic, \
+documentary, anime, vintage, noir, sci-fi, minimalist)",
+  "color_palette": "Describe the dominant colors, contrast, saturation (e.g. warm \
+amber and teal with high contrast, desaturated earth tones, vibrant neon on dark backgrounds)",
+  "lighting": "Describe the lighting setup (e.g. natural golden hour, hard dramatic \
+key light with deep shadows, soft diffused overhead, neon practicals)",
+  "camera_style": "Describe camera movement and angle (e.g. slow tracking shots \
+with shallow DOF, static wide establishing shots, handheld documentary style, \
+low-angle dramatic push-ins)",
+  "composition": "Describe framing and composition patterns (e.g. rule of thirds \
+with leading lines, centered symmetrical, extreme close-ups, negative space)",
+  "mood": "One sentence on emotional tone (e.g. melancholic and contemplative, \
+energetic and urgent, calm and meditative)",
+  "scene_type": "Type of scene / genre context (e.g. urban night exterior, indoor \
+interview, nature landscape, product close-up)",
+  "motion_character": "Describe the motion feel (e.g. slow and fluid, quick cuts \
+with fast camera whip-pans, gentle floating, locked-off static)",
   "key_visual_elements": "Notable recurring visual motifs or elements visible in the frame"
 }
 
@@ -416,7 +425,9 @@ Output **only** valid JSON with this exact structure — no markdown, no comment
     {
       "id": 1,
       "narration": "Voice-over text 1-2 sentences",
-      "visual_prompt": "Detailed generation prompt incorporating the reference video's style: color palette, lighting, camera, composition, mood, motion. Include subject, action, environment.",
+      "visual_prompt": "Detailed generation prompt incorporating the reference \
+video's style: color palette, lighting, camera, composition, mood, motion. \
+Include subject, action, environment.",
       "duration_seconds": 5.0,
       "camera": "Camera movement matching reference style",
       "style": "Consistent with reference style profile"

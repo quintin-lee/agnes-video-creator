@@ -237,11 +237,16 @@ For each scene, include a "character_appearances" field listing which characters
        "outfit:林黛玉"    -> "new outfit description for character"
        "prop:name"       -> "prop description"
      Only include items that are NEW or CHANGED this episode.
-     Omit this field if nothing changed. */"""
+      Omit this field if nothing changed. */"""
             continuity_rule = """
-- When the user provides "Previous episode continuity", respect the existing visual registry and character states. Only describe NEW environments, changed outfits, or newly introduced props in "visual_updates". Reuse existing environment/prop/outfit descriptions in scene prompts instead of inventing new ones.
+- When the user provides "Previous episode continuity", respect the existing visual
+  registry and character states. Only describe NEW environments, changed outfits,
+  or newly introduced props in "visual_updates".
+- Reuse existing environment/prop/outfit descriptions in scene prompts instead of
+  inventing new ones.
 """
-        return f"""You are a professional short-video scriptwriter. Given a topic, produce a detailed storyboard.
+        return f"""You are a professional short-video scriptwriter. Given a topic,
+produce a detailed storyboard.
 
 Output **only** valid JSON with this exact structure — no markdown fences, no commentary:
 
@@ -255,8 +260,11 @@ Output **only** valid JSON with this exact structure — no markdown fences, no 
   "scenes": [
     {{
       "id": 1,
-      "narration": "Voice-over text in Chinese, 1-2 sentences{narration_hint}",
-      "visual_prompt": "Detailed English image/video generation prompt: subject, action, environment, lighting, camera, style, quality",{dialogue_field}
+      "narration": "Voice-over text in Chinese, 1-2 sentences"
+      f"{narration_hint}",
+      "visual_prompt": "Detailed English image/video generation prompt: subject, "
+      "action, environment, lighting, camera, style, quality"
+      f"{dialogue_field}",
       "duration_seconds": 5.0,
       "camera": "Camera movement (in Chinese)",
       "style": "Visual style (in Chinese)"
@@ -266,10 +274,18 @@ Output **only** valid JSON with this exact structure — no markdown fences, no 
 
 Rules:
 - Total video should be 15-60 seconds across all scenes.
-- Each scene 3-10 seconds. Shorter scenes for fast cuts, longer for establishing shots.
-- **narration** MUST be in Chinese — 1-2 sentences per scene. If characters have dialogues, narration provides context.
+- Each scene 3-10 seconds. Shorter scenes for fast cuts,
+  longer for establishing shots.
+- **narration** MUST be in Chinese — 1-2 sentences per scene.
+  If characters have dialogues, narration provides context.
 - **title, description, style_guide, mood, target_audience, camera** MUST be in Chinese.
-- **camera** field describes camera motion per scene, e.g. "缓慢推近" (slow zoom in), "向右平移" (pan right), "跟拍" (tracking), "手持晃动" (handheld), "航拍俯视" (aerial), "特写推近" (close-up dolly). Be specific.
-- **visual_prompt** MUST be a detailed English prompt suitable for image-to-video generation (subject, action, environment, lighting, camera motion, style). When characters appear, describe them in the visual_prompt as directed by their appearance.
-- When characters are provided, include **dialogues** for character interactions — each line spoken by a character in Chinese.
+- **camera** field describes camera motion per scene, e.g. "缓慢推近" (slow zoom in),
+  "向右平移" (pan right), "跟拍" (tracking), "手持晃动" (handheld), "航拍俯视" (aerial),
+  "特写推近" (close-up dolly). Be specific.
+- **visual_prompt** MUST be a detailed English prompt suitable for image-to-video
+  generation (subject, action, environment, lighting, camera motion, style).
+  When characters appear, describe them in the visual_prompt as directed by
+  their appearance.
+- When characters are provided, include **dialogues** for character interactions —
+  each line spoken by a character in Chinese.
 - The JSON must be parseable as-is with json.loads().{continuity_rule}"""

@@ -97,7 +97,7 @@ def _request_with_retry(
                 last_err = exc
             else:
                 raise SystemExit(
-                    f"HTTP {exc.code} from {path}{' after retries' if attempt > 1 else ''}: {detail}"
+                    f"HTTP {exc.code} {path}{' after retries' if attempt > 1 else ''}: {detail}"
                 ) from exc
         except (urllib.error.URLError, TimeoutError, OSError) as exc:
             if _is_retryable(exc) and attempt < cfg.request_retries:
@@ -161,8 +161,8 @@ def translate_prompt(prompt: str, cfg: AgnesConfig) -> str:
                 "role": "system",
                 "content": (
                     "Translate the user's generation prompt into fluent English. "
-                    "Preserve all concrete visual details, style words, camera motion, lighting, "
-                    "composition constraints, and negative instructions. Return only the English text."
+                    "Preserve all visual details, style words, camera motion, lighting, "
+                    "composition constraints, negative instructions. Return only the English text."
                 ),
             },
             {"role": "user", "content": prompt},

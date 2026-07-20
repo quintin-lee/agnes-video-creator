@@ -205,7 +205,8 @@ Given a novel excerpt, analyze it and output **only** valid JSON with no markdow
   "characters": [
     {
       "name": "角色名",
-      "appearance": "Detailed visual appearance description in English for AI image generation (age, hair, clothing, distinguishing features, build)",
+      "appearance": "Detailed visual appearance description in English for AI \
+image generation (age, hair, clothing, distinguishing features, build)",
       "role": "主角/反派/配角/龙套",
       "voice": ""
     }
@@ -219,7 +220,8 @@ Given a novel excerpt, analyze it and output **only** valid JSON with no markdow
       "character_focus": ["角色A", "角色B"]
     }
   ],
-  "remaining_text": "Any text that wasn't part of the analyzed episodes, or empty string if all covered"
+  "remaining_text": "Any text that wasn't part of the analyzed episodes, or \
+empty string if all covered"
 }
 
 Rules:

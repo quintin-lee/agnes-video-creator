@@ -801,7 +801,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     create.add_argument(
         "--voice-map",
-        help='Per-character voice assignment, JSON or key=value pairs '
+        help="Per-character voice assignment, JSON or key=value pairs "
         '(e.g. \'{"林黛玉":"zh-CN-XiaoxiaoNeural"}\')',
     )
     create.add_argument(

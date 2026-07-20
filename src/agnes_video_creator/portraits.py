@@ -117,8 +117,9 @@ def generate_character_portraits(
             if ff is not None and ff.is_populated():
                 char.face_features = ff
                 if verbose:
+                    n_marks = len(ff.distinctive_features)
                     print(
-                        f"    ✓ Face features stored ({len(ff.distinctive_features)} distinctive marks)",
+                        f"    ✓ Face features stored ({n_marks} distinctive marks)",
                         file=sys.stderr,
                     )
             elif verbose:
@@ -150,7 +151,8 @@ def inject_portraits_into_prompt(
     if not refs:
         return visual_prompt
 
-    return f"Character reference images: {'; '.join(refs)}. Ensure these characters look identical to their reference. {visual_prompt}"
+    base = f"Character reference images: {'; '.join(refs)}."
+    return f"{base} Ensure characters look identical to reference. {visual_prompt}"
 
 
 def _extract_portrait_url(data: dict[str, Any]) -> str | None:
