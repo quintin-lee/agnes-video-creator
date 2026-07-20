@@ -151,12 +151,14 @@ def check_consistency(
 
 
 def check_script_file(
-    script_paths: list[str],
+    script_paths: str | Path | list[str | Path],
     *,
     cfg: AgnesConfig | None = None,
     verbose: bool = True,
 ) -> ConsistencyReport:
     """Load scripts from JSON files and run consistency check."""
+    if isinstance(script_paths, (str, Path)):
+        script_paths = [script_paths]
     scripts = []
     for path in script_paths:
         p = Path(path)
