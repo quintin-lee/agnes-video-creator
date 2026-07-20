@@ -5,6 +5,7 @@ Also triggers character portrait generation if characters are defined.
 
 from __future__ import annotations
 
+import json
 import sys
 from typing import Any
 
@@ -113,20 +114,32 @@ def generate_scene_images(
 
         payload["extra_body"] = {"response_format": "url"}
 
-        data = request_json(
-            "POST",
-            "/v1/images/generations",
-            payload,
-            cfg=cfg,
-            timeout=180,
-        )
+        try:
+            data = request_json(
+                "POST",
+                "/v1/images/generations",
+                payload,
+                cfg=cfg,
+                timeout=180,
+            )
+        except (SystemExit, Exception) as exc:
+            msg = str(exc).split("\n")[0][:300] if str(exc) else str(exc)
+            print(f"    ✗ Failed: {msg}", file=sys.stderr)
+            # Truncate prompt for display, avoiding binary glyph issues
+            clean = final_prompt[:400].replace("\n", " ")
+            print(f"      Prompt: {clean}…" if len(final_prompt) > 400 else f"      Prompt: {clean}", file=sys.stderr)
+            print(f"      Skipping scene {scene.id}.", file=sys.stderr)
+            continue
 
         url = _extract_image_url(data)
         if not url:
-            raise SystemExit(
-                f"Scene {scene.id}: no image URL in response — "
-                f"{data}"
+            print(
+                f"    ✗ Scene {scene.id}: no image URL in response — "
+                f"{json.dumps(data, ensure_ascii=False)[:200]}",
+                file=sys.stderr,
             )
+            print(f"      Skipping scene {scene.id}.", file=sys.stderr)
+            continue
 
         scene.image_url = url
 
