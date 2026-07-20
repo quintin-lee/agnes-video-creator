@@ -36,28 +36,29 @@ jobs:
         run: python -m py_compile src/agnes_video_creator/*.py
 
       - name: Verify imports
-        run: python -c "
-        import sys; sys.path.insert(0, 'src')
-        for m in [
-          'agnes_video_creator.models',
-          'agnes_video_creator.config',
-          'agnes_video_creator.utils',
-          'agnes_video_creator.cost_estimator',
-          'agnes_video_creator.reference',
-          'agnes_video_creator.script_generator',
-          'agnes_video_creator.image_generator',
-          'agnes_video_creator.video_generator',
-          'agnes_video_creator.assembler',
-          'agnes_video_creator.consistency',
-          'agnes_video_creator.continuity',
-          'agnes_video_creator.pipeline_state',
-          'agnes_video_creator.portraits',
-          'agnes_video_creator.face_analyzer',
-          'agnes_video_creator.project',
-          'agnes_video_creator.novel',
-          'agnes_video_creator.storyboard',
-          'agnes_video_creator.batch',
-        ]:
-          __import__(m); print(f'  \u2713 {m}')
-        print('All imports OK')
-        "
+        run: |
+          python -c "
+          import sys; sys.path.insert(0, 'src')
+          for m in [
+            'agnes_video_creator.models',
+            'agnes_video_creator.config',
+            'agnes_video_creator.utils',
+            'agnes_video_creator.cost_estimator',
+            'agnes_video_creator.reference',
+            'agnes_video_creator.script_generator',
+            'agnes_video_creator.image_generator',
+            'agnes_video_creator.video_generator',
+            'agnes_video_creator.assembler',
+            'agnes_video_creator.consistency',
+            'agnes_video_creator.continuity',
+            'agnes_video_creator.pipeline_state',
+            'agnes_video_creator.portraits',
+            'agnes_video_creator.face_analyzer',
+            'agnes_video_creator.project',
+            'agnes_video_creator.novel',
+            'agnes_video_creator.storyboard',
+            'agnes_video_creator.batch',
+          ]:
+            __import__(m); print(f'  ✓ {m}')
+          print('All imports OK')
+          "
