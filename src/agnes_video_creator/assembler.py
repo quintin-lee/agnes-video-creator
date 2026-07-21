@@ -185,6 +185,18 @@ def assemble_video(
     if cfg.add_chapters:
         final_path = _embed_chapters(final_path, script, temp_dir, verbose)
 
+    # ── Step 4b: Apply watermark overlay ────────────────────────
+    if cfg.watermark_path:
+        final_path = _add_watermark(
+            final_path,
+            cfg.watermark_path,
+            temp_dir,
+            position=cfg.watermark_position,
+            opacity=cfg.watermark_opacity,
+            scale=cfg.watermark_scale,
+            verbose=verbose,
+        )
+
     # ── Step 5: Copy to final output ────────────────────────────
     if not output_name:
         safe = "".join(c if c.isalnum() or c in ("-", "_") else "_" for c in script.title)
@@ -1379,6 +1391,54 @@ def _embed_chapters(
     # Save chapters sidecar for YouTube
     _generate_chapters_file(script, temp_dir, verbose)
 
+    return output if output.exists() else video_path
+
+
+def _add_watermark(
+    video_path: Path,
+    watermark_path: str,
+    output_dir: Path,
+    position: str = "bottom-right",
+    opacity: float = 0.7,
+    scale: float = 0.1,
+    verbose: bool = True,
+) -> Path:
+    """Overlay a watermark/logo image on the video using ffmpeg overlay filter.
+
+    Position supports: top-left, top-right, bottom-left, bottom-right.
+    Opacity (0.0-1.0) and scale (relative to video width) are configurable.
+    """
+    if not shutil.which("ffmpeg"):
+        return video_path
+    logo = Path(watermark_path)
+    if not logo.exists():
+        if verbose:
+            print(f"  ! Watermark not found: {logo}", file=sys.stderr)
+        return video_path
+
+    output = output_dir / f"watermarked_{video_path.name}"
+
+    pos_map = {
+        "top-left": "10:10",
+        "top-right": "W-w-10:10",
+        "bottom-left": "10:H-h-10",
+        "bottom-right": "W-w-10:H-h-10",
+    }
+    xy = pos_map.get(position, "W-w-10:H-h-10")
+
+    vf = f"[1:v]format=rgba,colorchannelmixer=aa={opacity}[logo];"
+    vf += f"[0:v][logo]overlay={xy}:format=auto,format=yuv420p"
+
+    cmd = [
+        "ffmpeg", "-y",
+        "-i", str(video_path),
+        "-i", str(logo),
+        "-filter_complex", vf,
+        "-c:a", "copy",
+        "-movflags", "+faststart",
+        str(output),
+    ]
+    _run_ffmpeg(cmd, "add watermark overlay", verbose)
     return output if output.exists() else video_path
 
 
