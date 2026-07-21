@@ -16,6 +16,7 @@ from agnes_video_creator.assembler import (
     _run_ffmpeg,
     _trim_clip,
     assemble_video,
+    batch_export,
     export_crop,
 )
 from agnes_video_creator.config import AgnesConfig
@@ -190,6 +191,36 @@ class TestExportCrop:
         src.touch()
         result = export_crop(src, src)
         assert result == src
+
+
+class TestBatchExport:
+    def test_batch_export_basic(self, tmp_path: Path) -> None:
+        src = tmp_path / "input.mp4"
+        src.touch()
+        with patch("subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(returncode=0)
+            results = batch_export(src, tmp_path, aspects=["16:9", "9:16", "1:1"], verbose=False)
+        assert len(results) == 3
+        assert "16:9" in results
+        assert "9:16" in results
+        assert "1:1" in results
+
+    def test_batch_export_filters_unknown(self, tmp_path: Path) -> None:
+        src = tmp_path / "input.mp4"
+        src.touch()
+        with patch("subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(returncode=0)
+            results = batch_export(src, tmp_path, aspects=["16:9", "99:99"], verbose=False)
+        assert "16:9" in results
+        assert "99:99" not in results
+
+    def test_batch_export_default_aspects(self, tmp_path: Path) -> None:
+        src = tmp_path / "input.mp4"
+        src.touch()
+        with patch("subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(returncode=0)
+            results = batch_export(src, tmp_path, verbose=False)
+        assert len(results) == 3  # defaults: 16:9, 9:16, 1:1
 
 
 class TestAssembleVideo:
