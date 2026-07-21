@@ -39,7 +39,12 @@ agnes-video create "一只猫探索未来城市" --style "cyberpunk" --duration 
 - [导出预设](#导出预设)
 - [成本估算](#成本估算)
 - [一致性检查](#一致性检查)
+- [面部特征分析与面部锁定](#面部特征分析与面部锁定)
+- [跨集连续性](#跨集连续性)
+- [分镜预览](#分镜预览)
 - [配置](#配置)
+- [开发](#开发)
+- [依赖](#依赖)
 - [项目结构](#项目结构)
 
 ---
@@ -573,6 +578,257 @@ PRICE_PER_TEXT_CALL = 0.002    # agnes-2.0-flash
 
 ---
 
+## 面部特征分析与面部锁定
+
+使用 `agnes-2.0-flash` 视觉模型对角色肖像进行**法医级面部特征分析**，提取结构化描述并自动注入到每个场景的图像生成 prompt 中，确保角色面部在所有场景中保持一致。
+
+### 工作流程
+
+```
+角色肖像 → 视觉模型分析 → FaceFeatures 结构化数据 → 注入场景 prompt → 一致的面部输出
+```
+
+1. 在 `project analyze` 阶段为每个角色生成参考肖像
+2. `face_analyzer.analyze_face()` 调用视觉模型分析肖像
+3. 提取 14 个维度的面部特征（脸型、眼型、肤色、发型等）
+4. 特征以自然语言描述形式注入到每个场景的 `visual_prompt`
+5. 图像/视频模型在生成时参考这些特征，实现**面部锁定**
+
+### 提取的面部维度
+
+| 维度 | 字段 | 示例值 |
+|------|------|--------|
+| 脸型 | `face_shape` | oval / round / square / heart |
+| 眼型 | `eye_shape` | almond / hooded / monolid |
+| 瞳色 | `eye_color` | dark_brown / blue / green |
+| 眉形 | `eyebrow` | straight / arched / thick |
+| 鼻型 | `nose` | straight / aquiline / button |
+| 唇型 | `mouth_lips` | full / thin / wide |
+| 下颌 | `jaw_chin` | strong_jaw / pointed_chin |
+| 肤色 | `skin_tone` | fair / light / tan / dark |
+| 肤质 | `skin_texture` | smooth / freckled / weathered |
+| 发型 | `hair_style` | short / long / curly / wavy |
+| 发色 | `hair_color` | black / brown / blonde |
+| 年龄段 | `age_range` | young_adult / middle_aged / elderly |
+| 性别表现 | `gender_presentation` | masculine / feminine |
+| 特征标记 | `distinctive_features` | ["scar_on_left_cheek", "glasses"] |
+
+### 编程使用
+
+```python
+from agnes_video_creator.face_analyzer import analyze_face
+from agnes_video_creator.config import AgnesConfig
+
+cfg = AgnesConfig(api_key="your_key")
+features = analyze_face("https://example.com/portrait.jpg", cfg)
+
+# 转换为 prompt 片段
+prompt_snippet = features.to_prompt_snippet()
+# 输出: "脸型: 鹅卵形, 眼型: 杏仁眼, 瞳色: 深棕, ..."
+
+# 快速验证肖像是否包含人脸
+from agnes_video_creator.face_analyzer import validate_portrait_face
+has_face = validate_portrait_face("https://example.com/portrait.jpg", cfg)
+```
+
+### `FaceFeatures` 数据模型
+
+```python
+@dataclass
+class FaceFeatures:
+    face_shape: str = ""
+    eye_shape: str = ""
+    eye_color: str = ""
+    eyebrow: str = ""
+    nose: str = ""
+    mouth_lips: str = ""
+    jaw_chin: str = ""
+    skin_tone: str = ""
+    skin_texture: str = ""
+    hair_style: str = ""
+    hair_color: str = ""
+    age_range: str = ""
+    gender_presentation: str = ""
+    distinctive_features: list[str] = field(default_factory=list)
+
+    def to_prompt_snippet(self) -> str:
+        """格式化为自然语言描述，用于注入图像生成 prompt"""
+
+    def is_populated(self) -> bool:
+        """检查是否提取到了足够的特征"""
+```
+
+---
+
+## 跨集连续性
+
+多集短剧流水线中，`continuity.py` 负责在集与集之间传递**角色状态**和**视觉注册表**，使每一集的情节和视觉风格建立在上一集的基础上，而不是从头开始。
+
+### 核心数据结构
+
+**角色连续性** — 每个角色在每集结束时的状态：
+
+| 字段 | 含义 |
+|------|------|
+| `outfit` | 当前服装描述（如 "蓝色道袍"） |
+| `location` | 当前位置（如 "华山之巅"） |
+| `emotional_state` | 情绪状态（如 "愤怒"、"悲伤"） |
+| `notes` | 自由格式笔记（如 "右臂受伤"） |
+
+**视觉注册表** — 跨集复用的视觉描述：
+
+| 类型 | 用途 |
+|------|------|
+| `environments` | 场景场所描述（如 "青云门大殿"） |
+| `props` | 道具物品描述（如 "轩辕剑"） |
+| `outfits` | 角色服装描述（如 "夜行衣"） |
+
+**剧情线索** — 当前活跃的剧情线列表，确保子情节不会丢失。
+
+### 工作流程
+
+```
+Episode 1 ──→ ContinuityState ──→ Episode 2 prompt ──→ Episode 2
+                                                  ↓
+                                        ContinuityState updated
+                                                  ↓
+                                        Episode 3 prompt ...
+```
+
+1. 在 `project analyze` 开始时创建空的 `ContinuityState`
+2. 为 Episode 1 生成脚本后，LLM 返回 `visual_updates`（服装/地点/情绪变更）
+3. `apply_visual_updates()` 更新连续性状态
+4. Episode 2 的生成 prompt 中注入前情提要和视觉参考
+5. 重复此过程直到所有集完成
+
+### 生成的 Prompt 示例
+
+```
+前情提要:
+主角在青云门大殿击败了黑衣人，救出了师妹。
+
+当前活跃剧情线索:
+  - 黑衣人幕后主使的身份
+  - 师妹体内封印的魔气
+
+已知视觉参考 (新场景中请复用这些描述):
+  场景场所:
+    - 青云门大殿: 青石铺地，高悬牌匾"青云"
+  道具物品:
+    - 轩辕剑: 三尺青锋，剑身刻有龙纹
+  角色服装:
+    - 主角: 蓝色道袍，左袖破损
+
+角色当前状态:
+  主角:
+    当前服装: 蓝色道袍 (左袖破损)
+    当前位置: 青云门大殿
+    情绪状态: 愤怒
+```
+
+---
+
+## 分镜预览
+
+在图像生成完成后、视频生成之前，`storyboard.py` 生成一个**独立的 HTML 故事板**，让用户预览所有场景的图像、旁白和对话，及早发现问题，避免在问题场景上浪费 API 配额。
+
+### 工作方式
+
+```bash
+# 故事板预览嵌入在渲染流程中：
+# 生成图像 → 生成 HTML 故事板 → 用户确认 → 生成视频
+```
+
+HTML 故事板包含：
+- 所有场景的缩略图（16:9 网格布局）
+- 场景编号、时长、摄像机运动标签
+- 旁白文字
+- 对话列表（角色名 + 台词）
+- 出镜角色标签
+- 角色列表
+
+### 用户交互
+
+当故事板被生成后，CLI 会提示：
+
+```
+📋 Storyboard: /path/to/storyboard.html
+检查分镜中角色的面部一致性。
+继续生成视频? [Y/n]:
+```
+
+- 输入 `Y` 或回车 → 继续视频生成
+- 输入 `n` → 暂停。用户可以编辑场景图像，然后用 `--skip-images` 跳过图像步骤继续
+
+### 编程使用
+
+```python
+from agnes_video_creator.storyboard import generate_storyboard_html
+from agnes_video_creator.models import Script
+
+script = Script.load("projects/my-drama/episodes/1/script.json")
+html_path = generate_storyboard_html(script, "storyboard.html")
+# → 打开 storyboard.html 查看
+```
+
+### 设计目的
+
+- **节省 API 费用**：在投入视频生成之前发现角色面部不一致、构图问题
+- **加速迭代**：图像生成（秒级）远比视频生成（分钟级）便宜，先审图像再生成视频
+- **团队协作**：HTML 文件可分享给非技术成员评审
+
+---
+
+## 开发
+
+### 安装开发依赖
+
+```bash
+pip install -e ".[dev]"
+```
+
+这安装：
+- `ruff` — 代码检查与格式化
+- `pytest` — 测试框架
+
+### 运行测试
+
+```bash
+# 运行全部测试
+pytest
+
+# 运行单个测试模块
+pytest tests/test_models.py
+
+# 带覆盖率报告
+pytest --cov=agnes_video_creator --cov-report=term-missing
+```
+
+### 代码风格
+
+使用 [Ruff](https://docs.astral.sh/ruff/) 进行 lint 和格式化，配置在 `pyproject.toml` 中：
+
+```bash
+# 检查代码问题
+ruff check src/
+
+# 自动修复
+ruff check --fix src/
+
+# 格式化代码
+ruff format src/
+```
+
+规则集：`E`、`F`、`W`（核心）、`I`（导入排序）、`N`（命名）、`UP`（pyupgrade）、`B`（bugbear）、`SIM`（简化）。
+
+行长度：**100 字符**。
+
+### 项目结构
+
+参见下方的[项目结构](#项目结构)章节。
+
+---
+
 ## 配置
 
 ### 环境变量
@@ -612,22 +868,43 @@ PRICE_PER_TEXT_CALL = 0.002    # agnes-2.0-flash
 
 ## 依赖
 
-### 运行时
+### 系统依赖
 
 | 依赖 | 用途 | 安装方式 |
 |------|------|----------|
 | Python 3.10+ | 运行环境 | — |
 | ffmpeg | 视频合成与裁剪（必需） | 系统包管理器 |
-| edge-tts | TTS 旁白（可选） | `pip install edge-tts` |
 
 ### Python 包
 
-| 包 | 用途 | 自动安装 |
-|----|------|---------|
-| httpx | HTTP 请求（调用 Agnes API） | ✅ |
-| fastapi + uvicorn | Web UI 后端 | ✅ |
-| aiofiles | 异步文件操作 | ✅ |
-| edge-tts | TTS 配音 | ❌（可选） |
+#### 核心（自动安装）
+
+| 包 | 用途 |
+|----|------|
+| httpx | HTTP 请求（调用 Agnes API） |
+| aiofiles | 异步文件操作 |
+
+#### 可选依赖组
+
+```bash
+# Web UI
+pip install -e ".[web]"
+
+# TTS 配音
+pip install -e ".[tts]"
+
+# 开发
+pip install -e ".[dev]"
+
+# 全部
+pip install -e ".[web,tts,dev]"
+```
+
+| 组 | 包 | 用途 |
+|----|----|------|
+| `[web]` | fastapi + uvicorn + pydantic | Web UI 后端 |
+| `[tts]` | edge-tts | TTS 配音 |
+| `[dev]` | ruff + pytest | 代码检查与测试 |
 
 ---
 
@@ -637,6 +914,16 @@ PRICE_PER_TEXT_CALL = 0.002    # agnes-2.0-flash
 agnes-video-creator/
 ├── pyproject.toml                     # 项目配置 + 入口点
 ├── README.md                          # 本文档
+├── tests/                             # 测试套件（340+ 测试）
+│   ├── test_models.py
+│   ├── test_utils.py
+│   ├── test_assembler.py
+│   ├── test_novel.py
+│   ├── test_portraits.py
+│   ├── test_storyboard.py
+│   ├── test_consistency.py
+│   ├── test_project.py
+│   └── conftest.py                    # 共享测试夹具
 └── src/agnes_video_creator/
     ├── __init__.py
     ├── models.py                      # Script / Scene / Character 数据模型
