@@ -62,6 +62,8 @@ class AgnesConfig:
     bgm_volume: float = 0.08  # BGM gain relative to narration (0.08 ≈ -22dB)
     bgm_fade_in: float = 2.0  # fade-in duration for BGM (seconds)
     bgm_fade_out: float = 3.0  # fade-out duration for BGM (seconds)
+    bgm_ducking: bool = True  # sidechain-compress BGM when narration plays
+    bgm_duck_threshold: float = -25.0  # dB threshold for ducking
     title_card: bool = True  # add opening title card
     end_credits: bool = True  # add end credits card
 
@@ -113,6 +115,8 @@ class AgnesConfig:
             add_audio=os.environ.get("AGNES_AUDIO", "1") != "0",
             add_subtitles=os.environ.get("AGNES_SUBTITLES", "1") != "0",
             bgm_path=os.environ.get("AGNES_BGM_PATH", ""),
+            bgm_ducking=os.environ.get("AGNES_BGM_DUCKING", "1") != "0",
+            bgm_duck_threshold=float(os.environ.get("AGNES_BGM_DUCK_THRESHOLD", "-25.0")),
             audio_lang=os.environ.get("AGNES_AUDIO_LANG", "zh"),
             tts_voice=os.environ.get("AGNES_TTS_VOICE", "zh-CN-XiaoxiaoNeural"),
             subtitle_font=os.environ.get("AGNES_SUBTITLE_FONT", ""),

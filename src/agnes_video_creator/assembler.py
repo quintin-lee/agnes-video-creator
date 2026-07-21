@@ -1114,7 +1114,34 @@ def _add_bgm(
 
     output = temp_dir / "with_bgm.mp4"
 
-    # ffmpeg: loop BGM, trim to video duration, fade in/out, volume adjust, mix
+    # ffmpeg: loop BGM, trim, fade, volume adjust
+    # If ducking is enabled, use sidechaincompress so BGM dips when narration plays
+    if cfg.bgm_ducking:
+        # sidechaincompress: first input (bgm) gets compressed when second
+        # input (0:a = video+TTS) exceeds the threshold
+        filter_complex = (
+            f"[1:a]volume={cfg.bgm_volume},"
+            f"atrim=duration={dur},"
+            f"afade=t=in:d={cfg.bgm_fade_in},"
+            f"afade=t=out:st={dur - cfg.bgm_fade_out}:d={cfg.bgm_fade_out}"
+            f"[bgm];"
+            f"[bgm][0:a]sidechaincompress="
+            f"threshold={cfg.bgm_duck_threshold}dB:"
+            f"ratio=20:attack=50:release=500:makeup=1"
+            f"[bgm_ducked];"
+            f"[0:a][bgm_ducked]amix=inputs=2:duration=first:dropout_transition=2"
+        )
+    else:
+        filter_complex = (
+            f"[1:a]"
+            f"volume={cfg.bgm_volume},"
+            f"atrim=duration={dur},"
+            f"afade=t=in:d={cfg.bgm_fade_in},"
+            f"afade=t=out:st={dur - cfg.bgm_fade_out}:d={cfg.bgm_fade_out}"
+            f"[bgm];"
+            f"[0:a][bgm]amix=inputs=2:duration=first:dropout_transition=2"
+        )
+
     cmd = [
         "ffmpeg",
         "-y",
@@ -1125,13 +1152,7 @@ def _add_bgm(
         "-i",
         str(bgm_path.resolve()),
         "-filter_complex",
-        f"[1:a]"
-        f"volume={cfg.bgm_volume},"
-        f"atrim=duration={dur},"
-        f"afade=t=in:d={cfg.bgm_fade_in},"
-        f"afade=t=out:st={dur - cfg.bgm_fade_out}:d={cfg.bgm_fade_out}"
-        f"[bgm];"
-        f"[0:a][bgm]amix=inputs=2:duration=first:dropout_transition=2",
+        filter_complex,
         "-c:v",
         "copy",
         "-c:a",
