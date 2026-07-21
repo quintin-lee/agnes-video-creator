@@ -853,6 +853,21 @@ ruff format src/
 | `AGNES_SUBTITLE_COLOR` | 字幕颜色 | `white` |
 | `AGNES_SUBTITLE_POSITION` | 字幕位置 | `bottom` |
 | `AGNES_BGM_PATH` | BGM 文件路径 | 空（无 BGM） |
+| `AGNES_BGM_VOLUME` | BGM 音量（相对旁白） | `0.08` |
+| `AGNES_BGM_FADE_IN` | BGM 淡入秒数 | `2.0` |
+| `AGNES_BGM_FADE_OUT` | BGM 淡出秒数 | `3.0` |
+| `AGNES_BGM_DUCKING` | 旁白时自动压低 BGM | `1` |
+| `AGNES_BGM_DUCK_THRESHOLD` | 侧链压缩阈值（dB） | `-25.0` |
+| `AGNES_METADATA` | 嵌入生成元数据 | `1` |
+| `AGNES_CHAPTERS` | 添加 YouTube 章节标记 | `1` |
+| `AGNES_THUMBNAIL` | 提取缩略图 | `1` |
+| `AGNES_SFX_DIR` | 场景音效目录 | 空（无音效） |
+| `AGNES_CACHE` | 启用生成缓存 | `1` |
+| `AGNES_CACHE_DIR` | 缓存目录覆盖 | `~/.agnes-video/cache` |
+| `AGNES_WATERMARK_PATH` | 水印图片路径 | 空（无水印） |
+| `AGNES_WATERMARK_POS` | 水印位置（top-left/right/bottom-left/right） | `bottom-right` |
+| `AGNES_WATERMARK_OPACITY` | 水印不透明度（0-1） | `0.7` |
+| `AGNES_WATERMARK_SCALE` | 水印缩放（相对视频宽度） | `0.1` |
 
 ### 命令行选项
 
