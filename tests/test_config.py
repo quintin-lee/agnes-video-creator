@@ -175,3 +175,65 @@ class TestAgnesConfigFromEnv:
         monkeypatch.delenv("APIHUB_AGNES_API_KEY", raising=False)
         cfg = AgnesConfig.from_env()
         assert cfg.api_key == ""
+
+    # ── New feature env vars ────────────────────────────────────────
+
+    def test_from_env_metadata_disabled(self, monkeypatch) -> None:
+        monkeypatch.setenv("AGNES_METADATA", "0")
+        cfg = AgnesConfig.from_env()
+        assert not cfg.add_metadata
+
+    def test_from_env_chapters_disabled(self, monkeypatch) -> None:
+        monkeypatch.setenv("AGNES_CHAPTERS", "0")
+        cfg = AgnesConfig.from_env()
+        assert not cfg.add_chapters
+
+    def test_from_env_thumbnail_disabled(self, monkeypatch) -> None:
+        monkeypatch.setenv("AGNES_THUMBNAIL", "0")
+        cfg = AgnesConfig.from_env()
+        assert not cfg.add_thumbnail
+
+    def test_from_env_sfx_dir(self, monkeypatch) -> None:
+        monkeypatch.setenv("AGNES_SFX_DIR", "/sfx")
+        cfg = AgnesConfig.from_env()
+        assert cfg.sfx_dir == "/sfx"
+
+    def test_from_env_cache_disabled(self, monkeypatch) -> None:
+        monkeypatch.setenv("AGNES_CACHE", "0")
+        cfg = AgnesConfig.from_env()
+        assert not cfg.cache_enabled
+
+    def test_from_env_cache_dir(self, monkeypatch) -> None:
+        monkeypatch.setenv("AGNES_CACHE_DIR", "/custom/cache")
+        cfg = AgnesConfig.from_env()
+        assert cfg.cache_dir == "/custom/cache"
+
+    def test_from_env_watermark_path(self, monkeypatch) -> None:
+        monkeypatch.setenv("AGNES_WATERMARK_PATH", "/logo.png")
+        cfg = AgnesConfig.from_env()
+        assert cfg.watermark_path == "/logo.png"
+
+    def test_from_env_watermark_position(self, monkeypatch) -> None:
+        monkeypatch.setenv("AGNES_WATERMARK_POS", "top-left")
+        cfg = AgnesConfig.from_env()
+        assert cfg.watermark_position == "top-left"
+
+    def test_from_env_watermark_opacity(self, monkeypatch) -> None:
+        monkeypatch.setenv("AGNES_WATERMARK_OPACITY", "0.5")
+        cfg = AgnesConfig.from_env()
+        assert cfg.watermark_opacity == 0.5
+
+    def test_from_env_watermark_scale(self, monkeypatch) -> None:
+        monkeypatch.setenv("AGNES_WATERMARK_SCALE", "0.15")
+        cfg = AgnesConfig.from_env()
+        assert cfg.watermark_scale == 0.15
+
+    def test_from_env_bgm_ducking_disabled(self, monkeypatch) -> None:
+        monkeypatch.setenv("AGNES_BGM_DUCKING", "0")
+        cfg = AgnesConfig.from_env()
+        assert not cfg.bgm_ducking
+
+    def test_from_env_bgm_duck_threshold(self, monkeypatch) -> None:
+        monkeypatch.setenv("AGNES_BGM_DUCK_THRESHOLD", "-30.0")
+        cfg = AgnesConfig.from_env()
+        assert cfg.bgm_duck_threshold == -30.0
