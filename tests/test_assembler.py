@@ -20,7 +20,7 @@ from agnes_video_creator.assembler import (
     export_crop,
 )
 from agnes_video_creator.config import AgnesConfig
-from agnes_video_creator.models import Script, Scene, Character
+from agnes_video_creator.models import Character, Scene, Script
 
 
 @pytest.fixture
