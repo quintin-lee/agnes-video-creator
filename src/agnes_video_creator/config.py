@@ -69,6 +69,7 @@ class AgnesConfig:
     add_metadata: bool = True  # embed generation metadata in output file
     add_chapters: bool = True  # add YouTube-compatible chapter markers
     add_thumbnail: bool = True  # extract thumbnail image from final video
+    sfx_dir: str = ""  # path to directory with scene SFX audio files (empty = no SFX)
     watermark_path: str = ""  # path to watermark/logo overlay image (empty = no watermark)
     watermark_position: str = "bottom-right"  # top-left / top-right / bottom-left / bottom-right
     watermark_opacity: float = 0.7  # 0.0 (transparent) to 1.0 (opaque)
@@ -133,6 +134,7 @@ class AgnesConfig:
             add_metadata=os.environ.get("AGNES_METADATA", "1") != "0",
             add_chapters=os.environ.get("AGNES_CHAPTERS", "1") != "0",
             add_thumbnail=os.environ.get("AGNES_THUMBNAIL", "1") != "0",
+            sfx_dir=os.environ.get("AGNES_SFX_DIR", ""),
             watermark_path=os.environ.get("AGNES_WATERMARK_PATH", ""),
             watermark_position=os.environ.get("AGNES_WATERMARK_POS", "bottom-right"),
             watermark_opacity=float(os.environ.get("AGNES_WATERMARK_OPACITY", "0.7")),

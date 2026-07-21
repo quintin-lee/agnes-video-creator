@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import datetime
 import json
+import re
 import shutil
 import subprocess
 import sys
@@ -176,6 +177,10 @@ def assemble_video(
             final_path = _add_bgm(final_path, temp_dir, cfg, verbose)
         elif verbose:
             print(f"  ⚠ BGM file not found: {bgm}", file=sys.stderr)
+
+    # ── Step 3.6: Add scene sound effects ───────────────────────
+    if cfg.sfx_dir:
+        final_path = _add_sfx(final_path, script, temp_dir, cfg, verbose)
 
     # ── Step 4: Inject generation metadata ──────────────────────
     if cfg.add_metadata:
@@ -1439,6 +1444,76 @@ def _add_watermark(
         str(output),
     ]
     _run_ffmpeg(cmd, "add watermark overlay", verbose)
+    return output if output.exists() else video_path
+
+
+def _add_sfx(
+    video_path: Path,
+    script: Script,
+    temp_dir: Path,
+    cfg: AgnesConfig,
+    verbose: bool,
+) -> Path:
+    """Mix scene-level sound effects into the video's audio track.
+
+    For each scene with a non-empty ``sfx`` field, looks for a matching
+    audio file in ``cfg.sfx_dir`` and mixes it at the scene's position
+    in the timeline.
+    """
+    sfx_dir = Path(cfg.sfx_dir) if cfg.sfx_dir else None
+    if not sfx_dir or not sfx_dir.is_dir():
+        return video_path
+
+    if not script.scenes:
+        return video_path
+
+    # Compute scene start timestamps
+    sfx_inputs: list[dict] = []
+    cursor = 0.0
+    for scene in script.scenes:
+        dur = scene.duration_seconds or 5.0
+        if scene.sfx:
+            # Normalise sfx description to a filename
+            name = re.sub(r"[^a-z0-9_]", "", scene.sfx.lower().replace(" ", "_").strip())
+            for ext in (".mp3", ".wav", ".m4a", ".aac", ".ogg"):
+                sfx_file = sfx_dir / f"{name}{ext}"
+                if sfx_file.exists():
+                    sfx_inputs.append(
+                        {"path": str(sfx_file), "timestamp_ms": int(cursor * 1000)}
+                    )
+                    break
+        cursor += dur
+
+    if not sfx_inputs:
+        return video_path
+
+    output = temp_dir / "with_sfx.mp4"
+    n_sfx = len(sfx_inputs)
+
+    # Build filter_complex: adelay each SFX to its scene position, then amix all
+    filter_parts: list[str] = []
+    for i, sfx in enumerate(sfx_inputs):
+        idx = i + 1  # input index (0 = video)
+        delay_ms = sfx["timestamp_ms"]
+        filter_parts.append(
+            f"[{idx}:a]adelay={delay_ms}|{delay_ms},"
+            f"volume=1.0[sfx{i}]"
+        )
+
+    # Mix original audio with all SFX tracks
+    mix_inputs = "[0:a]" + "".join(f"[sfx{i}]" for i in range(n_sfx))
+    filter_parts.append(f"{mix_inputs}amix=inputs={n_sfx + 1}:duration=first:dropout_transition=2")
+
+    filter_complex = ";".join(filter_parts)
+
+    cmd = ["ffmpeg", "-y", "-i", str(video_path)]
+    for sfx in sfx_inputs:
+        cmd.extend(["-i", sfx["path"]])
+    cmd.extend(["-filter_complex", filter_complex])
+    cmd.extend(["-c:v", "copy"])
+    cmd.extend(["-c:a", "aac", "-b:a", "128k"])
+    cmd.extend(["-movflags", "+faststart", str(output)])
+    _run_ffmpeg(cmd, "add scene sound effects", verbose)
     return output if output.exists() else video_path
 
 
