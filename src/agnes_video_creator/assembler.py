@@ -545,20 +545,51 @@ def _get_duration(video_path: Path) -> float:
 
 
 _XFADE_POOL = [
+    # Fades
     "fade",
     "dissolve",
+    "fadeblack",
+    "fadewhite",
+    "fadegrays",
+    "fadefast",
+    "fadeslow",
+    # Directional wipes
     "wipeleft",
     "wiperight",
     "wipeup",
     "wipedown",
+    "diagbl",
+    "diagbr",
+    "diagtl",
+    "diagtr",
+    # Slides
     "slideleft",
     "slideright",
     "slideup",
     "slidedown",
+    # Smooth directional
+    "smoothleft",
+    "smoothright",
+    "smoothup",
+    "smoothdown",
+    # Shape reveals
+    "circleclose",
+    "circleopen",
+    "circlecrop",
+    "rectcrop",
+    # Blinds / curtains
+    "horzclose",
+    "horzopen",
+    "vertclose",
+    "vertopen",
+    # Special effects
     "pixelize",
-    "fadeblack",
-    "fadewhite",
     "radial",
+    "distance",
+    "zoomin",
+    "hblur",
+    "directionalright",
+    "directionalleft",
 ]
 
 # Deterministic pseudo-random picker for transition types
