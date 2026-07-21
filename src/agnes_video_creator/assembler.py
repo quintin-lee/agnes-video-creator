@@ -1575,3 +1575,29 @@ def export_crop(
     if dst.exists():
         return dst
     return src
+
+
+def batch_export(
+    src: Path,
+    output_dir: Path,
+    aspects: list[str] | None = None,
+    verbose: bool = True,
+) -> dict[str, Path]:
+    """Export *src* to every aspect ratio in *aspects* at once.
+
+    Returns a dict mapping each aspect string (e.g. ``"9:16"``) to the
+    exported file path.  Skips any unknown aspect ratios.
+    """
+    aspects = aspects or ["16:9", "9:16", "1:1"]
+    results: dict[str, Path] = {}
+    for aspect in aspects:
+        if aspect not in ASPECT_PRESETS:
+            if verbose:
+                print(f"  ⚠ Unknown aspect '{aspect}' — skipping", file=sys.stderr)
+            continue
+        stem = f"{src.stem}_{aspect.replace(':', 'x')}{src.suffix}"
+        dst = output_dir / stem
+        out = export_crop(src, dst, aspect=aspect, verbose=verbose)
+        if out.exists():
+            results[aspect] = out
+    return results
