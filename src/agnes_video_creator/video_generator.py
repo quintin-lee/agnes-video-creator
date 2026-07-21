@@ -13,6 +13,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from agnes_video_creator.cache import ContentCache
 from agnes_video_creator.config import AgnesConfig
 from agnes_video_creator.models import Script
 from agnes_video_creator.utils import (
@@ -100,6 +101,8 @@ def _render_scenes(
     scene_ids: set[int] | None = None,
     verbose: bool = True,
 ) -> None:
+    cache = ContentCache(cfg.resolved_cache) if cfg.cache_enabled else None
+
     for _i, scene in enumerate(script.scenes):
         if scene_ids is not None and scene.id not in scene_ids:
             continue
@@ -152,6 +155,18 @@ def _render_scenes(
         use_image = mode == "image-to-video" and scene.is_image_ready
         if use_image:
             payload["image"] = scene.image_url  # single image
+
+        # Check generation cache before creating the task
+        if cache:
+            cached_path = cache.get(payload)
+            if cached_path:
+                scene.video_path = str(cached_path)
+                if verbose:
+                    print(
+                        f"    ✓ Cache hit: {cached_path.name}",
+                        file=sys.stderr,
+                    )
+                continue
 
         # Create the video task
         try:
@@ -206,6 +221,8 @@ def _render_scenes(
         try:
             download_file(url, local_path)
             scene.video_path = str(local_path)
+            if cache:
+                cache.put(payload, local_path)
             if verbose:
                 print(f"    ✓ Saved: {local_path.name}", file=sys.stderr)
         except Exception as exc:

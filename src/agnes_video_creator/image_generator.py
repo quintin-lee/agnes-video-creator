@@ -9,6 +9,7 @@ import json
 import sys
 from typing import Any
 
+from agnes_video_creator.cache import ContentCache
 from agnes_video_creator.config import AgnesConfig
 from agnes_video_creator.continuity import ContinuityState
 from agnes_video_creator.models import Character, Script
@@ -84,6 +85,9 @@ def generate_scene_images(
         generate_character_portraits(script, cfg=cfg, verbose=verbose)
         script.save(str(cfg.resolved_output / "script.json"))
 
+    # Initialise generation cache
+    cache = ContentCache(cfg.resolved_cache) if cfg.cache_enabled else None
+
     for _i, scene in enumerate(script.scenes):
         if scene_ids is not None and scene.id not in scene_ids:
             continue
@@ -132,7 +136,17 @@ def generate_scene_images(
         if portrait_ref:
             payload["image"] = portrait_ref
 
-        payload["extra_body"] = {"response_format": "url"}
+        # Check generation cache before calling the API
+        if cache:
+            cached_path = cache.get(payload)
+            if cached_path:
+                scene.image_path = str(cached_path)
+                if verbose:
+                    print(
+                        f"    ✓ Cache hit: {cached_path.name}",
+                        file=sys.stderr,
+                    )
+                continue
 
         try:
             data = request_json(
@@ -172,6 +186,8 @@ def generate_scene_images(
         try:
             download_file(url, local_path)
             scene.image_path = str(local_path)
+            if cache:
+                cache.put(payload, local_path)
             if verbose:
                 print(f"    ✓ Saved: {local_path.name}", file=sys.stderr)
         except Exception as exc:

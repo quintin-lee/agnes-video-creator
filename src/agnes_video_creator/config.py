@@ -70,6 +70,8 @@ class AgnesConfig:
     add_chapters: bool = True  # add YouTube-compatible chapter markers
     add_thumbnail: bool = True  # extract thumbnail image from final video
     sfx_dir: str = ""  # path to directory with scene SFX audio files (empty = no SFX)
+    cache_enabled: bool = True  # enable content-addressed generation cache
+    cache_dir: str = ""  # override cache directory (default: ~/.agnes-video/cache)
     watermark_path: str = ""  # path to watermark/logo overlay image (empty = no watermark)
     watermark_position: str = "bottom-right"  # top-left / top-right / bottom-left / bottom-right
     watermark_opacity: float = 0.7  # 0.0 (transparent) to 1.0 (opaque)
@@ -106,6 +108,13 @@ class AgnesConfig:
     def resolved_temp(self) -> Path:
         return Path(self.temp_dir).resolve()
 
+    @property
+    def resolved_cache(self) -> Path:
+        override = self.cache_dir
+        if override:
+            return Path(override).resolve()
+        return Path.home() / ".agnes-video" / "cache"
+
     def ensure_dirs(self) -> None:
         self.resolved_output.mkdir(parents=True, exist_ok=True)
         self.resolved_temp.mkdir(parents=True, exist_ok=True)
@@ -135,6 +144,8 @@ class AgnesConfig:
             add_chapters=os.environ.get("AGNES_CHAPTERS", "1") != "0",
             add_thumbnail=os.environ.get("AGNES_THUMBNAIL", "1") != "0",
             sfx_dir=os.environ.get("AGNES_SFX_DIR", ""),
+            cache_enabled=os.environ.get("AGNES_CACHE", "1") != "0",
+            cache_dir=os.environ.get("AGNES_CACHE_DIR", ""),
             watermark_path=os.environ.get("AGNES_WATERMARK_PATH", ""),
             watermark_position=os.environ.get("AGNES_WATERMARK_POS", "bottom-right"),
             watermark_opacity=float(os.environ.get("AGNES_WATERMARK_OPACITY", "0.7")),
