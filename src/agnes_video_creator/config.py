@@ -66,6 +66,7 @@ class AgnesConfig:
     bgm_duck_threshold: float = -25.0  # dB threshold for ducking
     title_card: bool = True  # add opening title card
     end_credits: bool = True  # add end credits card
+    add_metadata: bool = True  # embed generation metadata in output file
 
     # ── Reference video analysis ──────────────────────────────────────
     ref_num_frames: int = 3  # frames to extract for style analysis
@@ -123,4 +124,5 @@ class AgnesConfig:
             subtitle_size=int(os.environ.get("AGNES_SUBTITLE_SIZE", "28")),
             subtitle_color=os.environ.get("AGNES_SUBTITLE_COLOR", "white"),
             subtitle_position=os.environ.get("AGNES_SUBTITLE_POSITION", "bottom"),
+            add_metadata=os.environ.get("AGNES_METADATA", "1") != "0",
         )

@@ -10,6 +10,7 @@ Supports:
 
 from __future__ import annotations
 
+import datetime
 import json
 import shutil
 import subprocess
@@ -176,7 +177,11 @@ def assemble_video(
         elif verbose:
             print(f"  ⚠ BGM file not found: {bgm}", file=sys.stderr)
 
-    # ── Step 4: Copy to final output ────────────────────────────
+    # ── Step 4: Inject generation metadata ──────────────────────
+    if cfg.add_metadata:
+        final_path = _inject_metadata(final_path, script, temp_dir, cfg, verbose)
+
+    # ── Step 5: Copy to final output ────────────────────────────
     if not output_name:
         safe = "".join(c if c.isalnum() or c in ("-", "_") else "_" for c in script.title)
         output_name = f"{safe}.mp4"
@@ -1170,6 +1175,51 @@ def _add_bgm(
     if output.exists():
         return output
     return video_path
+
+
+# ── Metadata injection ───────────────────────────────────────────────
+
+
+def _inject_metadata(
+    video_path: Path,
+    script: Script,
+    temp_dir: Path,
+    cfg: AgnesConfig,
+    verbose: bool,
+) -> Path:
+    """Embed generation metadata as MP4 metadata tags."""
+    output = temp_dir / "with_metadata.mp4"
+    now = datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds")
+
+    meta = {
+        "title": script.title,
+        "description": script.description[:200] if script.description else "",
+        "encoding_tool": f"AgnesVideoCreator/{cfg.text_model}+{cfg.image_model}+{cfg.video_model}",
+        "creation_time": now,
+        "artist": "Agnes AI",
+        "comment": (
+            f"Scenes:{len(script.scenes)} "
+            f"Duration:{script.total_duration:.0f}s "
+            f"FPS:{cfg.target_fps} "
+            f"Episodes:{script.episode}"
+        ),
+    }
+
+    cmd = [
+        "ffmpeg",
+        "-y",
+        "-i",
+        str(video_path),
+        "-c",
+        "copy",
+    ]
+    for key, val in meta.items():
+        if val:
+            cmd += ["-metadata", f"{key}={val}"]
+    cmd.append(str(output))
+
+    _run_ffmpeg(cmd, "inject metadata", verbose)
+    return output if output.exists() else video_path
 
 
 # ── Aspect-ratio presets ────────────────────────────────────────────
