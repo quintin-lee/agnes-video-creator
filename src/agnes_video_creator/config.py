@@ -67,6 +67,8 @@ class AgnesConfig:
     title_card: bool = True  # add opening title card
     end_credits: bool = True  # add end credits card
     add_metadata: bool = True  # embed generation metadata in output file
+    add_chapters: bool = True  # add YouTube-compatible chapter markers
+    add_thumbnail: bool = True  # extract thumbnail image from final video
 
     # ── Reference video analysis ──────────────────────────────────────
     ref_num_frames: int = 3  # frames to extract for style analysis
@@ -125,4 +127,6 @@ class AgnesConfig:
             subtitle_color=os.environ.get("AGNES_SUBTITLE_COLOR", "white"),
             subtitle_position=os.environ.get("AGNES_SUBTITLE_POSITION", "bottom"),
             add_metadata=os.environ.get("AGNES_METADATA", "1") != "0",
+            add_chapters=os.environ.get("AGNES_CHAPTERS", "1") != "0",
+            add_thumbnail=os.environ.get("AGNES_THUMBNAIL", "1") != "0",
         )

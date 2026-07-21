@@ -181,6 +181,10 @@ def assemble_video(
     if cfg.add_metadata:
         final_path = _inject_metadata(final_path, script, temp_dir, cfg, verbose)
 
+    # ── Step 4a: Embed chapter markers ──────────────────────────
+    if cfg.add_chapters:
+        final_path = _embed_chapters(final_path, script, temp_dir, verbose)
+
     # ── Step 5: Copy to final output ────────────────────────────
     if not output_name:
         safe = "".join(c if c.isalnum() or c in ("-", "_") else "_" for c in script.title)
@@ -194,6 +198,12 @@ def assemble_video(
             f"  ✓ Final video: {output_path} ({size_mb:.1f} MB)",
             file=sys.stderr,
         )
+
+    # ── Step 5a: Extract thumbnail ──────────────────────────────
+    if cfg.add_thumbnail:
+        thumb = _extract_thumbnail(output_path, cfg.resolved_output, cfg, verbose)
+        if thumb and verbose:
+            print(f"  ✓ Thumbnail: {thumb}", file=sys.stderr)
 
     return output_path
 
@@ -1219,6 +1229,125 @@ def _inject_metadata(
     cmd.append(str(output))
 
     _run_ffmpeg(cmd, "inject metadata", verbose)
+    return output if output.exists() else video_path
+
+
+# ── Thumbnail extraction ─────────────────────────────────────────────
+
+
+def _extract_thumbnail(
+    video_path: Path,
+    output_dir: Path,
+    cfg: AgnesConfig,
+    verbose: bool,
+) -> Path | None:
+    """Extract a representative frame from the video as a JPEG thumbnail."""
+    dur = _get_duration(video_path)
+    if dur <= 0:
+        return None
+    ts = dur / 3  # grab frame at 1/3 mark (usually a good composition point)
+
+    thumb_path = output_dir / f"{video_path.stem}_thumb.jpg"
+    cmd = [
+        "ffmpeg",
+        "-y",
+        "-ss",
+        f"{ts:.1f}",
+        "-i",
+        str(video_path),
+        "-vframes",
+        "1",
+        "-q:v",
+        "3",
+        str(thumb_path),
+    ]
+    _run_ffmpeg(cmd, "extract thumbnail", verbose)
+    return thumb_path if thumb_path.exists() else None
+
+
+# ── YouTube chapters ──────────────────────────────────────────────────
+
+
+def _generate_chapters_file(
+    script: Script,
+    output_dir: Path,
+    verbose: bool,
+) -> Path | None:
+    """Generate a YouTube-compatible chapters.txt sidecar and return its path.
+
+    Chapter boundaries are computed from each scene's duration_seconds.
+    """
+    if not script.scenes:
+        return None
+
+    lines: list[str] = []
+    cursor = 0.0
+    for scene in script.scenes:
+        dur = scene.duration_seconds or 5.0
+        mins = int(cursor // 60)
+        secs = int(cursor % 60)
+        label = scene.narration[:60] if scene.narration else f"Scene {scene.id}"
+        lines.append(f"{mins:02d}:{secs:02d} - {label}")
+        cursor += dur
+
+    chapters_path = output_dir / f"{script.title[:30]}_chapters.txt"
+    chapters_path.write_text("\n".join(lines), encoding="utf-8")
+    return chapters_path
+
+
+def _embed_chapters(
+    video_path: Path,
+    script: Script,
+    temp_dir: Path,
+    verbose: bool,
+) -> Path:
+    """Write MP4 chapter markers based on scene boundaries.
+
+    Uses ffmpeg metadata format: http://ffmpeg.org/ffmpeg-formats.html#Metadata-1
+    """
+    if not script.scenes:
+        return video_path
+
+    output = temp_dir / "with_chapters.mp4"
+    meta_path = temp_dir / "chapters_meta.txt"
+
+    # Build ffmetadata chapter entries
+    meta_lines = [";FFMETADATA1"]
+    cursor_ms = 0
+    for scene in script.scenes:
+        dur_ms = int((scene.duration_seconds or 5.0) * 1000)
+        end_ms = cursor_ms + dur_ms
+        label = scene.narration[:60] if scene.narration else f"Scene {scene.id}"
+        meta_lines.extend([
+            "[CHAPTER]",
+            "TIMEBASE=1/1000",
+            f"START={cursor_ms}",
+            f"END={end_ms}",
+            f"title={label}",
+            "",
+        ])
+        cursor_ms = end_ms
+
+    meta_path.write_text("\n".join(meta_lines), encoding="utf-8")
+
+    cmd = [
+        "ffmpeg",
+        "-y",
+        "-i",
+        str(video_path),
+        "-i",
+        str(meta_path),
+        "-map_metadata",
+        "1",
+        "-c",
+        "copy",
+        str(output),
+    ]
+    _run_ffmpeg(cmd, "embed chapter markers", verbose)
+
+    # Save chapters sidecar for YouTube
+    _generate_chapters_file(script, temp_dir, verbose)
+
     return output if output.exists() else video_path
 
 
