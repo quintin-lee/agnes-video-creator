@@ -697,7 +697,7 @@ def create_app() -> FastAPI:
             raise HTTPException(422, "Invalid JSON body") from None
 
         changed = False
-        for field in ("narration", "visual_prompt", "duration_seconds", "camera", "style"):
+        for field in ("narration", "visual_prompt", "duration_seconds", "camera", "style", "locked"):
             if field in body:
                 setattr(scene, field, body[field])
                 changed = True

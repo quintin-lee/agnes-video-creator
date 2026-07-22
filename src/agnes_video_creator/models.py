@@ -122,6 +122,7 @@ class Scene:
     # Sound effect description for this scene, e.g. "wind howling, footsteps on gravel"
     trim_in: float = 0.0  # seconds to cut from start of video
     trim_out: float = 0.0  # seconds to cut from end of video
+    locked: bool = False  # if True, protected from re-render
 
     @property
     def is_image_ready(self) -> bool:

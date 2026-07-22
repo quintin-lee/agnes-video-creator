@@ -321,12 +321,25 @@ class Project:
                 if _lock:
                     _lock.release()
 
+        # ── Helpers: scene locking ──
+        def _unfinished_scene_ids(check_attr: str) -> set[int]:
+            """Return IDs of unlocked scenes missing *check_attr* readiness."""
+            ids: set[int] = set()
+            for s in script.scenes:
+                if s.locked:
+                    continue
+                ready = getattr(s, check_attr)()
+                if not ready:
+                    ids.add(s.id)
+            return ids
+
         # ── Images ──
         if not skip_images and ep.status in ("script_ready", "pending", "images_ready"):
-            do_images = not all(s.is_image_ready for s in script.scenes)
-            if do_images:
-                _log(f"\n  [{num}] Generating images ({len(script.scenes)} scenes)...")
-                script = generate_scene_images(script, cfg=cfg, verbose=verbose)
+            need_ids = _unfinished_scene_ids("is_image_ready")
+            if need_ids:
+                _log(f"\n  [{num}] Generating images ({len(need_ids)} scenes, "
+                     f"{len(script.scenes) - len(need_ids)} locked/ready skipped)...")
+                script = generate_scene_images(script, cfg=cfg, scene_ids=need_ids, verbose=verbose)
                 ep.advance()
             else:
                 ep.advance()
@@ -350,18 +363,16 @@ class Project:
 
         # ── Videos ──
         if not skip_video and ep.status in ("images_ready", "script_ready", "videos_ready"):
-            do_videos = not all(s.is_video_ready for s in script.scenes)
-            if do_videos:
-                if verbose:
-                    print(
-                        f"\n  [{num}] Generating videos ({len(script.scenes)} scenes)...",
-                        file=sys.stderr,
-                    )
+            need_video_ids = _unfinished_scene_ids("is_video_ready")
+            if need_video_ids:
+                _log(f"\n  [{num}] Generating videos ({len(need_video_ids)} scenes, "
+                     f"{len(script.scenes) - len(need_video_ids)} locked/ready skipped)...")
                 script = generate_video_clips(
                     script,
                     cfg=cfg,
                     mode=self.video_mode,
                     poll=not no_poll,
+                    scene_ids=need_video_ids,
                     verbose=verbose,
                 )
                 ep.advance()

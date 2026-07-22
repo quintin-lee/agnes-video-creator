@@ -35,6 +35,7 @@ class SceneState:
     image_url: str = ""
     video_url: str = ""
     error: str = ""
+    locked: bool = False
 
 
 @dataclass
