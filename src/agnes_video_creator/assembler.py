@@ -180,6 +180,9 @@ def assemble_video(
 
     # ── Step 3.6: Add scene sound effects ───────────────────────
     if cfg.sfx_dir:
+        if cfg.auto_sfx:
+            from agnes_video_creator.sfx_matcher import auto_fill_sfx
+            auto_fill_sfx(script, cfg, verbose=verbose)
         final_path = _add_sfx(final_path, script, temp_dir, cfg, verbose)
 
     # ── Step 4: Inject generation metadata ──────────────────────
@@ -201,6 +204,10 @@ def assemble_video(
             scale=cfg.watermark_scale,
             verbose=verbose,
         )
+
+    # ── Step 4c: Post-processing (super-res / interpolation / stabilisation / colour) ──
+    if cfg.post_super_res > 1 or cfg.post_interpolate > 0 or cfg.post_stabilize or cfg.post_color_grade:
+        final_path = _post_process_video(final_path, temp_dir, cfg, verbose)
 
     # ── Step 5: Copy to final output ────────────────────────────
     if not output_name:
@@ -359,6 +366,83 @@ def _trim_clip(
         str(dst),
     ]
     _run_ffmpeg(cmd, f"trim {src.name} [{start:.1f}s → {end:.1f}s]", verbose)
+
+
+# ── Post-processing (super-res / interpolation / stabilisation / colour) ──
+
+
+def _post_process_video(video_path: Path, temp_dir: Path, cfg: AgnesConfig, verbose: bool) -> Path:
+    """Apply post-processing filters to the assembled video.
+
+    Respects *cfg.post_super_res*, *cfg.post_interpolate*,
+    *cfg.post_stabilize*, and *cfg.post_color_grade*.
+    Returns the path to the post-processed video.
+    """
+    current = video_path
+    output_vs = temp_dir / "post_processed.mp4"
+
+    # Phase 1 — stabilisation (2-pass, must be isolated)
+    if cfg.post_stabilize:
+        detect_log = temp_dir / "transforms.trf"
+        _run_ffmpeg(
+            [
+                "ffmpeg", "-y", "-i", str(current),
+                "-vf", "vidstabdetect=shakiness=5:accuracy=15:result=" + str(detect_log),
+                "-f", "null", "-",
+            ],
+            "stabilise: detect",
+            verbose,
+        )
+        stable = temp_dir / "post_stable.mp4"
+        _run_ffmpeg(
+            [
+                "ffmpeg", "-y", "-i", str(current),
+                "-vf", f"vidstabtransform=input={detect_log}:zoom=1:smoothing=10",
+                "-c:a", "aac", "-b:a", "128k",
+                str(stable),
+            ],
+            "stabilise: transform",
+            verbose,
+        )
+        current = stable
+
+    # Phase 2 — combined filter chain (super-res + interpolation + color grade)
+    filters: list[str] = []
+
+    if cfg.post_super_res > 1:
+        w = cfg.video_width * cfg.post_super_res
+        h = cfg.video_height * cfg.post_super_res
+        filters.append(f"scale={w}:{h}:flags=lanczos")
+
+    if cfg.post_interpolate > 0:
+        filters.append(f"minterpolate=fps={cfg.post_interpolate}:mi_mode=mci:mc_mode=aobmc:me_mode=bidir")
+
+    if cfg.post_color_grade:
+        filters.append(cfg.post_color_grade)
+
+    if filters:
+        vf = ",".join(filters)
+        _run_ffmpeg(
+            [
+                "ffmpeg", "-y", "-i", str(current),
+                "-vf", vf,
+                "-c:a", "aac", "-b:a", "128k",
+                "-c:v", "libx264", "-preset", "fast", "-crf", "18",
+                "-pix_fmt", "yuv420p",
+                str(output_vs),
+            ],
+            "post-process: " + ", ".join(
+                p for p, enabled in [
+                    ("super-res", cfg.post_super_res > 1),
+                    ("interpolate", cfg.post_interpolate > 0),
+                    ("color", bool(cfg.post_color_grade)),
+                ] if enabled
+            ),
+            verbose,
+        )
+        current = output_vs
+
+    return current
 
 
 def _normalise_clip(
@@ -855,6 +939,13 @@ def _add_narration(
     if output.exists():
         if cfg.add_subtitles:
             output = _burn_subtitles(output, manifest_data, temp_dir, cfg, verbose)
+        # Save sidecar .srt if configured (even when not burning in)
+        if cfg.save_subtitle_files:
+            srt_path = _save_sidecar_srt(manifest_data, temp_dir)
+            if srt_path and cfg.subtitle_languages:
+                langs = [lang.strip() for lang in cfg.subtitle_languages.split(",") if lang.strip()]
+                for lang in langs:
+                    _translate_subtitle_file(srt_path, lang, cfg, verbose)
         return output
     return video_path
 
@@ -955,6 +1046,36 @@ def _generate_srt(manifest_data: list[dict]) -> str:
         cursor = end
 
     return "\n".join(lines)
+
+
+def _save_sidecar_srt(manifest_data: list[dict], temp_dir: Path) -> Path | None:
+    """Save standalone .srt sidecar to temp_dir. Returns the path or None."""
+    srt_content = _generate_srt(manifest_data)
+    if not srt_content.strip():
+        return None
+    srt_path = temp_dir / "subs.srt"
+    srt_path.write_text(srt_content, encoding="utf-8")
+    return srt_path
+
+
+def _translate_subtitle_file(srt_path: Path, lang: str, cfg: "AgnesConfig", verbose: bool) -> Path | None:
+    """Translate a subtitle file to *lang* and save alongside. Returns the translated path or None."""
+    if not srt_path.exists():
+        return None
+    from .utils import translate_prompt
+
+    text = srt_path.read_text(encoding="utf-8")
+    translated = translate_prompt(text, cfg, target_lang=lang)
+    if not translated:
+        if verbose:
+            print(f"  ⚠ Subtitle translation to {lang} failed, skipping", file=sys.stderr)
+        return None
+    dst = srt_path.with_name(srt_path.stem + f".{lang}" + srt_path.suffix)
+    dst.write_text(translated, encoding="utf-8")
+    if verbose:
+        fname = dst.relative_to(srt_path.parent)
+        print(f"  ✓ Subtitles saved: {fname}", file=sys.stderr)
+    return dst
 
 
 def _burn_subtitles(

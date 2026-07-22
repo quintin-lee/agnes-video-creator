@@ -72,12 +72,17 @@ class AgnesConfig:
     add_chapters: bool = True  # add YouTube-compatible chapter markers
     add_thumbnail: bool = True  # extract thumbnail image from final video
     sfx_dir: str = ""  # path to directory with scene SFX audio files (empty = no SFX)
+    auto_sfx: bool = True  # auto-fill scene SFX via NLP keyword matching + LLM fallback
     cache_enabled: bool = True  # enable content-addressed generation cache
     cache_dir: str = ""  # override cache directory (default: ~/.agnes-video/cache)
     watermark_path: str = ""  # path to watermark/logo overlay image (empty = no watermark)
     watermark_position: str = "bottom-right"  # top-left / top-right / bottom-left / bottom-right
     watermark_opacity: float = 0.7  # 0.0 (transparent) to 1.0 (opaque)
     watermark_scale: float = 0.1  # scale relative to video width (0.1 = 10%)
+    post_super_res: int = 1  # super-resolution scale factor (1=off, 2=2x upscale)
+    post_interpolate: int = 0  # frame interpolation target fps (0=off, e.g. 60)
+    post_stabilize: bool = False  # enable video stabilisation
+    post_color_grade: str = ""  # ffmpeg colorbalance preset string (empty=off)
 
     # ── Reference video analysis ──────────────────────────────────────
     ref_num_frames: int = 3  # frames to extract for style analysis
@@ -148,10 +153,15 @@ class AgnesConfig:
             add_chapters=os.environ.get("AGNES_CHAPTERS", "1") != "0",
             add_thumbnail=os.environ.get("AGNES_THUMBNAIL", "1") != "0",
             sfx_dir=os.environ.get("AGNES_SFX_DIR", ""),
+            auto_sfx=os.environ.get("AGNES_AUTO_SFX", "1") != "0",
             cache_enabled=os.environ.get("AGNES_CACHE", "1") != "0",
             cache_dir=os.environ.get("AGNES_CACHE_DIR", ""),
             watermark_path=os.environ.get("AGNES_WATERMARK_PATH", ""),
             watermark_position=os.environ.get("AGNES_WATERMARK_POS", "bottom-right"),
             watermark_opacity=float(os.environ.get("AGNES_WATERMARK_OPACITY", "0.7")),
             watermark_scale=float(os.environ.get("AGNES_WATERMARK_SCALE", "0.1")),
+            post_super_res=int(os.environ.get("AGNES_POST_SUPER_RES", "1")),
+            post_interpolate=int(os.environ.get("AGNES_POST_INTERPOLATE", "0")),
+            post_stabilize=os.environ.get("AGNES_POST_STABILIZE", "0") != "0",
+            post_color_grade=os.environ.get("AGNES_POST_COLOR_GRADE", ""),
         )
