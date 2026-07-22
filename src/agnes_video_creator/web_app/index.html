@@ -754,6 +754,24 @@ const App = {
       </div></div>`;
     }).join("")||'<div class="empty" style="text-align:center;padding:40px;color:var(--text3)">No scenes in this episode.</div>';
 
+    const totalDur=scenes.reduce((a,s)=>a+(s.duration_seconds||0),0)||1;
+    const timelineBar=scenes.length>1?`<div style="display:flex;height:28px;border-radius:5px;overflow:hidden;margin-bottom:12px;border:1px solid var(--border);cursor:pointer">
+      ${scenes.map(s=>{
+        const pct=((s.duration_seconds||0)/totalDur*100).toFixed(1);
+        const color=s.is_video_ready?"#4a4":s.is_image_ready?"#58a6ff":"#333";
+        return `<div onclick="document.getElementById('scene-edit-${s.id}')?.scrollIntoView({behavior:'smooth',block:'center'})"
+          style="flex:0 0 ${pct}%;background:${color};border-right:1px solid rgba(255,255,255,.08);
+          display:flex;align-items:center;justify-content:center;font-size:.65em;color:#fff;font-weight:600;
+          text-shadow:0 1px 2px rgba(0,0,0,.5);${s.locked?'box-shadow:inset 0 0 0 2px #ff6':''}
+          overflow:hidden;white-space:nowrap" title="Scene ${s.id}: ${(s.duration_seconds||0).toFixed(1)}s ${s.camera||''}">${pct>5?s.id:''}</div>`;
+      }).join("")}
+    </div><div style="display:flex;gap:12px;margin-bottom:12px;font-size:.75em">
+      <span><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:#4a4;vertical-align:middle;margin-right:3px"></span>Video ready</span>
+      <span><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:#58a6ff;vertical-align:middle;margin-right:3px"></span>Image only</span>
+      <span><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:#333;vertical-align:middle;margin-right:3px"></span>Pending</span>
+      <span><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:#333;vertical-align:middle;margin-right:3px;box-shadow:inset 0 0 0 2px #ff6"></span>Locked</span>
+    </div>`:"";
+
     el.innerHTML=`<div class="project-header"><div class="back"><a href="#/projects/${encodeURIComponent(name)}" title="Back">\u2190</a></div>
       <div class="info"><h1>EP${String(ep).padStart(2,"0")} ${this.esc(data.title||"")}</h1>
       <div class="meta"><span class="status-tag ${this.sc(data.status)}">${this.sl(data.status)}</span>
@@ -761,7 +779,7 @@ const App = {
       ${sc?.style_guide?" &middot; "+this.esc(sc.style_guide):""}</div></div></div>
 
       <div class="two-col"><div class="main">
-        <div class="card"><h2>Scenes</h2><div class="scene-grid">${sceneCards}</div></div>
+        <div class="card"><h2>Scenes</h2>${timelineBar}<div class="scene-grid">${sceneCards}</div></div>
         ${data.output_path?`<div class="card"><h2>Output</h2><div class="text-sm"><a href="/${data.output_path}" target="_blank">${this.esc(data.output_path)}</a></div></div>`:""}
       </div>      <div class="side">
         <div class="card"><h2>Controls</h2><div class="controls">
