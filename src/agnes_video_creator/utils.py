@@ -152,33 +152,44 @@ def needs_translation(text: str) -> bool:
     return any(ord(ch) > 127 for ch in text)
 
 
-def translate_prompt(prompt: str, cfg: AgnesConfig) -> str:
-    """Translate a non-English prompt to English using the text model."""
-    payload = {
+def translate_prompt(prompt: str, cfg: AgnesConfig, target_lang: str | None = None) -> str:
+    """Translate text using the text model.
+
+    When *target_lang* is set, translates subtitle content (preserving SRT
+    formatting) to that language.  When None (default), translates a generation
+    prompt into fluent English (backward-compatible).
+    """
+    if target_lang:
+        system_msg = (
+            f"Translate the SRT subtitle content below into {target_lang}. "
+            "Preserve ALL timing lines (-->), sequence numbers, and blank lines exactly. "
+            "Only translate the dialogue/subtitle text content. "
+            f"Return only the complete translated SRT content."
+        )
+    else:
+        system_msg = (
+            "Translate the user's generation prompt into fluent English. "
+            "Preserve all visual details, style words, camera motion, lighting, "
+            "composition constraints, negative instructions. Return only the English text."
+        )
+    payload: dict[str, object] = {
         "model": cfg.text_model,
         "messages": [
-            {
-                "role": "system",
-                "content": (
-                    "Translate the user's generation prompt into fluent English. "
-                    "Preserve all visual details, style words, camera motion, lighting, "
-                    "composition constraints, negative instructions. Return only the English text."
-                ),
-            },
+            {"role": "system", "content": system_msg},
             {"role": "user", "content": prompt},
         ],
         "temperature": 0,
-        "max_tokens": 800,
+        "max_tokens": 1600 if target_lang else 800,
     }
     data = request_json("POST", "/v1/chat/completions", payload)
     try:
         translated = data["choices"][0]["message"]["content"].strip()
     except (KeyError, IndexError, TypeError) as exc:
         raise SystemExit(
-            f"Prompt translation failed: {json.dumps(data, ensure_ascii=False)}"
+            f"Translation failed: {json.dumps(data, ensure_ascii=False)}"
         ) from exc
     if not translated:
-        raise SystemExit("Prompt translation failed: empty response")
+        raise SystemExit("Translation failed: empty response")
     return translated
 
 

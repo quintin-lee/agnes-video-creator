@@ -58,6 +58,8 @@ class AgnesConfig:
     subtitle_size: int = 28  # font size for burned-in subtitles
     subtitle_color: str = "white"  # font color name or hex for subtitles
     subtitle_position: str = "bottom"  # bottom / top / middle
+    save_subtitle_files: bool = True  # save standalone .srt sidecar alongside video
+    subtitle_languages: str = ""  # comma-separated: "en,ja,ko" — translates subtitles via API
     bgm_path: str = ""  # path to background music file (empty = no BGM)
     bgm_volume: float = 0.08  # BGM gain relative to narration (0.08 ≈ -22dB)
     bgm_fade_in: float = 2.0  # fade-in duration for BGM (seconds)
@@ -140,6 +142,8 @@ class AgnesConfig:
             subtitle_size=int(os.environ.get("AGNES_SUBTITLE_SIZE", "28")),
             subtitle_color=os.environ.get("AGNES_SUBTITLE_COLOR", "white"),
             subtitle_position=os.environ.get("AGNES_SUBTITLE_POSITION", "bottom"),
+            save_subtitle_files=os.environ.get("AGNES_SAVE_SUBS", "1") != "0",
+            subtitle_languages=os.environ.get("AGNES_SUB_LANGS", ""),
             add_metadata=os.environ.get("AGNES_METADATA", "1") != "0",
             add_chapters=os.environ.get("AGNES_CHAPTERS", "1") != "0",
             add_thumbnail=os.environ.get("AGNES_THUMBNAIL", "1") != "0",
