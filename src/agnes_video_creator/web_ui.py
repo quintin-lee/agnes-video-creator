@@ -242,6 +242,45 @@ def create_app() -> FastAPI:
 
     # ── API: Server status ──────────────────────────────────────────
 
+    @app.post("/api/projects/{name}/batch-export")
+    async def project_batch_export(name: str, request: Request):
+        """Export all episodes with output to multiple aspect ratios."""
+        from agnes_video_creator.assembler import ASPECT_PRESETS, batch_export
+
+        root = _projects_dir() / name
+        proj_file = root / "project.json"
+        if not proj_file.exists():
+            raise HTTPException(404, f"Project '{name}' not found")
+
+        project = Project.load(proj_file)
+        try:
+            body = await request.json()
+        except Exception:
+            raise HTTPException(422, "Invalid JSON body") from None
+
+        aspects = body.get("aspects", ["16:9", "9:16", "1:1"])
+        unknown = [a for a in aspects if a not in ASPECT_PRESETS]
+        if unknown:
+            raise HTTPException(400, f"Unknown aspect(s): {', '.join(unknown)}")
+
+        results = []
+        for ep in project.episodes:
+            if not ep.output_path or not Path(ep.output_path).exists():
+                continue
+            src = Path(ep.output_path)
+            exported = batch_export(src, root, aspects=aspects, verbose=False)
+            results.append({
+                "episode": ep.number,
+                "title": ep.title or "",
+                "exports": [
+                    {"aspect": a, "path": str(p.relative_to(root)),
+                     "url": f"/api/projects/{name}/videos/{p.name}"}
+                    for a, p in exported.items()
+                ],
+            })
+
+        return {"status": "ok", "episodes": results, "total": len(results)}
+
     @app.get("/api/status")
     def server_status():
         """Return server status including API key configuration."""

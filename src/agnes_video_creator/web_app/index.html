@@ -500,7 +500,17 @@ const App = {
         <div class="card"><h2>Controls</h2><div class="controls">
           <button class="btn btn-primary ${rl}" id="btn-analyze" onclick="App.runAnalyze('${this.esc(name)}')" ${data.is_running?"disabled":""}>Analyze</button>
           <button class="btn btn-primary ${rl}" id="btn-render-all" onclick="App.runRenderAll('${this.esc(name)}')" ${data.is_running?"disabled":""}>Render All</button>
-          <button class="btn btn-outline ${rl}" id="btn-check" onclick="App.runCheck('${this.esc(name)}')" ${data.is_running?"disabled":""}>Check Plot</button></div>
+          <button class="btn btn-outline ${rl}" id="btn-check" onclick="App.runCheck('${this.esc(name)}')" ${data.is_running?"disabled":""}>Check Plot</button>
+          <div class="text-sm text-muted" style="margin-top:8px;border-top:1px solid var(--border);padding-top:8px">
+            <span style="font-weight:600">Export All</span>
+            <div style="display:flex;gap:4px;margin-top:4px">
+              <button class="btn btn-small btn-outline" onclick="App.batchExportAll('${this.esc(name)}','9:16')" style="font-size:.75em">9:16</button>
+              <button class="btn btn-small btn-outline" onclick="App.batchExportAll('${this.esc(name)}','1:1')" style="font-size:.75em">1:1</button>
+              <button class="btn btn-small btn-outline" onclick="App.batchExportAll('${this.esc(name)}','4:3')" style="font-size:.75em">4:3</button>
+            </div>
+            <div id="export-all-feedback" class="text-xs text-muted" style="margin-top:4px"></div>
+          </div>
+          <div class="text-sm text-muted" style="margin-top:8px;border-top:1px solid var(--border);padding-top:8px"></div>
           <div class="text-sm text-muted" style="margin-top:8px;border-top:1px solid var(--border);padding-top:8px">
             <span style="font-weight:600">Batch Queue:</span>
             <button class="btn btn-small btn-outline" onclick="App.batchSubmit('${this.esc(name)}','analyze')" style="margin-left:6px">Analyze</button>
@@ -662,6 +672,19 @@ const App = {
       const r=await this.api("/api/projects/"+encodeURIComponent(name)+"/episodes/"+ep+"/export",
         {method:"POST",body:JSON.stringify({aspect})});
       if(fb)fb.innerHTML='\u2713 <a href="'+r.url+'" target="_blank" style="color:var(--accent)">'+aspect+'</a>';
+    }catch(e){
+      if(fb)fb.innerHTML='<span style="color:var(--red)">Failed: '+this.esc(e.message)+'</span>';
+    }
+  },
+
+  async batchExportAll(name,aspect){
+    const fb=document.getElementById("export-all-feedback");
+    if(fb)fb.textContent="Exporting all episodes to "+aspect+"...";
+    try{
+      const r=await this.api("/api/projects/"+encodeURIComponent(name)+"/batch-export",
+        {method:"POST",body:JSON.stringify({aspects:[aspect]})});
+      const done=r.episodes?.length||0;
+      if(fb)fb.innerHTML='\u2713 Exported '+done+' ep(s). <a href="#/projects/'+encodeURIComponent(name)+'" style="color:var(--accent)">Refresh</a>';
     }catch(e){
       if(fb)fb.innerHTML='<span style="color:var(--red)">Failed: '+this.esc(e.message)+'</span>';
     }
