@@ -243,13 +243,13 @@ const App = {
     const rows=jobs.map(j=>{
       const ep=j.episode_num?` EP${j.episode_num}`:"";
       const err=j.error&&j.status==="failed"?`<div class="text-xs text-muted" style="max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${this.esc(j.error)}">${this.esc(j.error.slice(0,80))}</div>`:"";
-      return `<tr>
+      return `<tr onclick="App.showJobDetail('${this.esc(j.id)}')" style="cursor:pointer">
         <td><code style="font-size:.8em">${this.esc(j.id)}</code></td>
         <td><span class="stat-badge ${this.bsc(j.status)}">${this.bsl(j.status)}</span></td>
         <td>${this.esc(j.job_type)}${ep}${err}</td>
         <td>${this.esc(j.project||"—")}</td>
         <td class="text-muted text-sm">${(j.created_at||"").slice(0,19)}</td>
-        <td>${j.status==="pending"||j.status==="running"?`<button class="btn btn-small btn-danger" onclick="App.cancelBatchJob('${this.esc(j.id)}')">Cancel</button>`:""}</td>
+        <td onclick="event.stopPropagation()">${j.status==="pending"||j.status==="running"?`<button class="btn btn-small btn-danger" onclick="App.cancelBatchJob('${this.esc(j.id)}')">Cancel</button>`:""}</td>
       </tr>`;
     }).join("")||'<tr><td colspan="6" style="text-align:center;color:var(--text3);padding:20px">No jobs.</td></tr>';
 
@@ -283,13 +283,56 @@ const App = {
       <div class="text-sm text-muted" style="margin-top:8px">
         <span>Auto-refreshes every 5s. </span>
         <a href="#/batch" onclick="App.renderBatch();return false">Refresh now</a>
+        <span id="sse-badge" style="margin-left:8px;display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--accent)" title="Live SSE connected"></span>
       </div>`;
     this._poller=setInterval(()=>{this.renderBatch()},5000);
+    this._connectBatchSSE();
+  },
+
+  _connectBatchSSE(){
+    if(this._batchES)this._batchES.close();
+    const es=new EventSource("/api/batch/events");
+    const badge=document.getElementById("sse-badge");
+    es.onmessage=(e)=>{
+      const d=JSON.parse(e.data);
+      if(badge)badge.style.background="#4d4";
+    };
+    es.onopen=()=>{if(badge)badge.style.background="var(--accent)"};
+    es.onerror=()=>{
+      if(badge)badge.style.background="var(--red)";
+      es.close();
+      setTimeout(()=>this._connectBatchSSE(),5000);
+    };
+    this._batchES=es;
+  },
+
+  async showJobDetail(jobId){
+    let data;
+    try{data=await this.api("/api/batch/jobs/"+encodeURIComponent(jobId))}
+    catch(e){alert("Failed: "+e.message);return}
+    const j=data.job;
+    const o=document.createElement("div");o.className="modal-overlay";
+    o.innerHTML=`<div class="modal" style="max-width:600px"><div style="display:flex;justify-content:space-between;align-items:center">
+      <h2 style="margin:0">Job Detail</h2>
+      <button class="btn btn-outline" onclick="this.closest('.modal-overlay').remove()" style="font-size:.85em">Close</button></div>
+      <table style="width:100%;margin-top:12px;font-size:.85em;border-collapse:collapse">
+        ${[
+          ["ID",`<code style="font-size:.8em">${this.esc(j.id)}</code>`],
+          ["Type",this.esc(j.job_type)+(j.episode_num?` EP${j.episode_num}`:"")],
+          ["Project",this.esc(j.project||"—")],
+          ["Status",`<span class="stat-badge ${this.bsc(j.status)}">${this.bsl(j.status)}</span>`],
+          ["Created",this.esc((j.created_at||"").slice(0,19))],
+          ["Started",this.esc((j.started_at||"").slice(0,19)||"—")],
+          ["Completed",this.esc((j.completed_at||"").slice(0,19)||"—")],
+          ["Error",j.error?`<pre style="margin:0;white-space:pre-wrap;font-size:.85em;color:var(--red);max-height:120px;overflow:auto">${this.esc(j.error)}</pre>`:"—"],
+        ].map(([k,v])=>`<tr><td style="padding:4px 8px;font-weight:600;vertical-align:top;white-space:nowrap;border-bottom:1px solid var(--border);width:90px">${k}</td><td style="padding:4px 8px;border-bottom:1px solid var(--border)">${v}</td></tr>`).join("")}
+      </table></div>`;
+    document.body.appendChild(o);
   },
 
   async cancelBatchJob(jobId){
     try{
-      const r=await this.api("/api/batch/cancel/"+encodeURIComponent(jobId),{method:"POST"});
+      const r=this.api("/api/batch/cancel/"+encodeURIComponent(jobId),{method:"POST"});
       if(r.cancelled)this.renderBatch();
       else alert("Could not cancel — job may already be done.");
     }catch(e){alert("Cancel failed: "+e.message)}

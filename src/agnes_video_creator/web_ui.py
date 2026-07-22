@@ -1248,6 +1248,32 @@ def create_app() -> FastAPI:
         ok = q.cancel(job_id)
         return {"cancelled": ok}
 
+    @app.get("/api/batch/events")
+    async def batch_events(request: Request):
+        """Stream batch job status changes via SSE."""
+        import asyncio
+
+        q = get_queue()
+        seen = {(j.id, j.status) for j in q.list_jobs(limit=200)}
+
+        async def event_stream():
+            try:
+                while True:
+                    if await request.is_disconnected():
+                        break
+                    now_jobs = q.list_jobs(limit=200)
+                    for job in now_jobs:
+                        key = (job.id, job.status)
+                        if key not in seen:
+                            seen.add(key)
+                            yield f"data: {json.dumps({'id': job.id, 'status': job.status, 'job_type': job.job_type, 'project': job.project})}\n\n"
+                    await asyncio.sleep(2)
+            except asyncio.CancelledError:
+                pass
+
+        from starlette.responses import StreamingResponse
+        return StreamingResponse(event_stream(), media_type="text/event-stream")
+
     # ── SPA catch-all ───────────────────────────────────────────────
 
     @app.get("/{full_path:path}")
