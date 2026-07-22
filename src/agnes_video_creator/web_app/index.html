@@ -329,6 +329,53 @@ const App = {
     document.body.appendChild(o);
   },
 
+  showProjectSettings(name){
+    const p=this.__projectData||{};
+    const o=document.createElement("div");o.className="modal-overlay";
+    o.innerHTML=`<div class="modal" style="max-width:500px"><h2>Project Settings</h2>
+      <div style="margin-top:12px;display:flex;flex-direction:column;gap:8px">
+        <label class="text-xs text-muted">Style Guide</label>
+        <input id="ps-style" type="text" value="${this.esc(p.style_guide||"")}" style="width:100%;background:var(--surface3);border:1px solid var(--border);color:var(--text);border-radius:3px;padding:4px 8px;font-size:.9em">
+        <label class="text-xs text-muted">Mood</label>
+        <input id="ps-mood" type="text" value="${this.esc(p.mood||"")}" style="width:100%;background:var(--surface3);border:1px solid var(--border);color:var(--text);border-radius:3px;padding:4px 8px;font-size:.9em">
+        <label class="text-xs text-muted">Target Audience</label>
+        <input id="ps-audience" type="text" value="${this.esc(p.target_audience||"")}" style="width:100%;background:var(--surface3);border:1px solid var(--border);color:var(--text);border-radius:3px;padding:4px 8px;font-size:.9em">
+        <label class="text-xs text-muted">Video Mode</label>
+        <select id="ps-vmode" style="width:100%;background:var(--surface3);border:1px solid var(--border);color:var(--text);border-radius:3px;padding:4px 8px;font-size:.9em">
+          <option value="text-to-video" ${p.video_mode==="text-to-video"?"selected":""}>Text to Video</option>
+          <option value="image-to-video" ${p.video_mode==="image-to-video"?"selected":""}>Image to Video</option>
+          <option value="keyframes" ${p.video_mode==="keyframes"?"selected":""}>Keyframes</option>
+        </select>
+        <label style="display:flex;align-items:center;gap:8px;font-size:.85em">
+          <input id="ps-parallel" type="checkbox" ${p.parallel?"checked":""}> Parallel rendering
+        </label>
+        <label style="display:flex;align-items:center;gap:8px;font-size:.85em">
+          <input id="ps-storyboard" type="checkbox" ${p.preview_storyboard?"checked":""}> Preview storyboard
+        </label>
+      </div>
+      <div class="acts" style="margin-top:16px">
+        <button class="btn btn-outline" onclick="this.closest('.modal-overlay').remove()">Cancel</button>
+        <button class="btn btn-primary" onclick="App.saveProjectSettings('${this.esc(name)}')">Save</button>
+        <span id="ps-feedback" class="text-sm" style="margin-left:8px"></span>
+      </div></div>`;
+    document.body.appendChild(o);
+  },
+
+  async saveProjectSettings(name){
+    const fb=document.getElementById("ps-feedback");if(fb)fb.textContent="Saving...";
+    try{
+      await this.api("/api/projects/"+encodeURIComponent(name)+"/settings",{method:"PUT",body:JSON.stringify({
+        style_guide:document.getElementById("ps-style")?.value||"",
+        mood:document.getElementById("ps-mood")?.value||"",
+        target_audience:document.getElementById("ps-audience")?.value||"",
+        video_mode:document.getElementById("ps-vmode")?.value||"image-to-video",
+        parallel:document.getElementById("ps-parallel")?.checked||false,
+        preview_storyboard:document.getElementById("ps-storyboard")?.checked||false,
+      })});
+      if(fb){fb.textContent="\u2713 Saved";fb.style.color="var(--accent)";setTimeout(()=>{fb.textContent=""},2000)}
+    }catch(e){if(fb){fb.textContent="Failed: "+e.message;fb.style.color="var(--red)"}else alert("Failed: "+e.message)}
+  },
+
   async createProject(){
     const n=document.getElementById("np-name")?.value?.trim();if(!n)return alert("Name required");
     const novel=document.getElementById("np-novel")?.value?.trim()||"";
@@ -344,7 +391,7 @@ const App = {
     let data;
     try{data=await this.api("/api/projects/"+encodeURIComponent(name))}
     catch(e){el.innerHTML=`<div class="empty-state"><p style="color:var(--red)">${e.message}</p><p class="text-sm mt-2"><a href="#/">Back</a></p></div>`;return}
-
+    this.__projectData=data;
     const epRows=data.episodes.map(e=>`<tr onclick="App.navigate('/projects/${encodeURIComponent(name)}/episodes/${e.number}')">
       <td><strong>EP${String(e.number).padStart(2,"0")}</strong></td>
       <td class="truncate" style="max-width:200px">${this.esc(e.title||"(untitled)")}</td>
@@ -402,7 +449,8 @@ const App = {
             <button class="btn btn-small btn-outline" onclick="App.batchSubmit('${this.esc(name)}','render_all')">Render All</button>
             <button class="btn btn-small btn-outline" onclick="App.batchSubmit('${this.esc(name)}','check',0)">Check All</button>
           </div>
-          <div id="check-results" class="text-sm mt-2"></div></div>
+          <div id="check-results" class="text-sm mt-2"></div>
+          <button class="btn btn-small btn-outline" onclick="App.showProjectSettings('${this.esc(name)}')" style="margin-top:8px;font-size:.85em">Settings</button></div>
         <div class="card"><h2>Characters (${(data.characters||[]).length})</h2><div class="char-list">${charItems}</div><div class="mt-2" style="display:flex;align-items:center;gap:8px"><button class="btn btn-small btn-primary" onclick="App.saveCharacterSheets('${this.esc(name)}')">Save All</button><button class="btn btn-small btn-outline" onclick="App.showCharacterGallery()">Gallery</button><span id="char-feedback" class="text-sm"></span></div></div>
         <div class="card"><h2>Info</h2><div class="text-sm" style="line-height:1.8">
           <div><span class="text-muted">Root:</span> ${this.esc(data.root)}</div>

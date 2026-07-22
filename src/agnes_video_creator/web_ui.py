@@ -341,6 +341,28 @@ def create_app() -> FastAPI:
             ],
         }
 
+    # ── API: Update project settings ───────────────────────────────
+
+    @app.put("/api/projects/{name}/settings")
+    async def update_project_settings(name: str, request: Request):
+        """Update project-level settings (style, mood, video_mode, parallel, etc.)."""
+        root = _projects_dir() / name
+        proj_file = root / "project.json"
+        if not proj_file.exists():
+            raise HTTPException(404, "Project not found")
+        project = Project.load(proj_file)
+        try:
+            body = await request.json()
+        except Exception:
+            raise HTTPException(422, "Invalid JSON body") from None
+
+        for field in ("style_guide", "mood", "target_audience", "video_mode", "parallel", "max_workers", "preview_storyboard"):
+            if field in body:
+                setattr(project, field, body[field])
+        project.updated_at = datetime.now(timezone.utc).isoformat()
+        project.save()
+        return {"status": "ok"}
+
     # ── API: Analyze novel ──────────────────────────────────────────
 
     @app.post("/api/projects/{name}/analyze")
