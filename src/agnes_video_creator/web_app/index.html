@@ -376,6 +376,16 @@ const App = {
     }catch(e){if(fb){fb.textContent="Failed: "+e.message;fb.style.color="var(--red)"}else alert("Failed: "+e.message)}
   },
 
+  async uploadCharacterPortrait(name,characterName,inputEl){
+    const file=inputEl?.files?.[0];if(!file)return;
+    const fd=new FormData();fd.append("file",file);
+    try{
+      const r=await fetch("/api/projects/"+encodeURIComponent(name)+"/characters/"+encodeURIComponent(characterName)+"/portrait",{method:"POST",body:fd});
+      if(!r.ok){const e=await r.json();throw new Error(e.detail||"Upload failed")}
+      this.renderProject(name);
+    }catch(e){alert("Upload failed: "+e.message)}
+  },
+
   async createProject(){
     const n=document.getElementById("np-name")?.value?.trim();if(!n)return alert("Name required");
     const novel=document.getElementById("np-novel")?.value?.trim()||"";
@@ -423,7 +433,12 @@ const App = {
           <textarea class="cs-${_n}-dialogue" rows="2" style="width:100%;background:var(--surface3);border:1px solid var(--border);color:var(--text2);border-radius:3px;padding:2px 6px;font-size:.8em;resize:vertical">${this.esc(c.sample_dialogue||"")}</textarea>
           <label class="text-xs text-muted">Backstory</label>
           <textarea class="cs-${_n}-backstory" rows="2" style="width:100%;background:var(--surface3);border:1px solid var(--border);color:var(--text2);border-radius:3px;padding:2px 6px;font-size:.8em;resize:vertical">${this.esc(c.backstory||"")}</textarea>
-          ${c.portrait_url?`<div style="margin-top:6px"><img src="${this.esc(c.portrait_url)}" alt="${_n}" style="width:120px;height:120px;object-fit:cover;border-radius:6px;border:1px solid var(--border);cursor:pointer" onclick="App.showPortrait('${this.esc(c.portrait_url)}','${_n}')"></div>`:""}
+          <div style="margin-top:6px;display:flex;align-items:flex-end;gap:8px">
+            ${c.portrait_url?`<img src="${this.esc(c.portrait_url)}" alt="${_n}" style="width:90px;height:90px;object-fit:cover;border-radius:6px;border:1px solid var(--border);cursor:pointer" onclick="App.showPortrait('${this.esc(c.portrait_url)}','${_n}')">`:""}
+            <label style="font-size:.8em;cursor:pointer;color:var(--accent);text-decoration:underline">${c.portrait_url?"Replace":"Upload"} portrait
+              <input type="file" accept="image/*" style="display:none" onchange="App.uploadCharacterPortrait('${this.esc(name)}','${_n}',this)">
+            </label>
+          </div>
         </div>
       </details>`;
     }).join("")||'<div class="empty">No characters</div>';

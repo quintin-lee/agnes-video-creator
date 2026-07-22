@@ -929,6 +929,54 @@ def create_app() -> FastAPI:
         project.save()
         return {"status": "ok", "updated": updated}
 
+    # ── API: Character portrait upload ─────────────────────────────
+
+    @app.post("/api/projects/{name}/characters/{character_name}/portrait")
+    async def upload_character_portrait(name: str, character_name: str, request: Request):
+        """Upload a character portrait image."""
+        root = _projects_dir() / name
+        proj_file = root / "project.json"
+        if not proj_file.exists():
+            raise HTTPException(404, "Project not found")
+
+        project = Project.load(proj_file)
+        chars = project.get_characters()
+        char = next((c for c in chars if c.name == character_name), None)
+        if not char:
+            raise HTTPException(404, f"Character '{character_name}' not found")
+
+        try:
+            form = await request.form()
+            file = form.get("file")
+            if not file or not hasattr(file, "filename") or not file.filename:
+                raise HTTPException(400, "No file uploaded")
+        except HTTPException:
+            raise
+        except Exception:
+            raise HTTPException(422, "Invalid multipart form data") from None
+
+        portrait_dir = root / "portraits"
+        portrait_dir.mkdir(parents=True, exist_ok=True)
+        ext = Path(file.filename).suffix or ".jpg"
+        dst = portrait_dir / f"{character_name}{ext}"
+        content = await file.read()
+        dst.write_bytes(content)
+
+        char.portrait_path = str(dst)
+        char.portrait_url = f"/api/projects/{name}/portraits/{dst.name}"
+        project.set_characters(chars)
+        project.save()
+        return {"status": "ok", "portrait_url": char.portrait_url}
+
+    @app.get("/api/projects/{name}/portraits/{filename:path}")
+    def serve_portrait(name: str, filename: str):
+        """Serve a character portrait image."""
+        root = _projects_dir() / name
+        file_path = root / "portraits" / filename
+        if not file_path.exists() or not file_path.is_file():
+            raise HTTPException(404, "Portrait not found")
+        return FileResponse(str(file_path))
+
     # ── API: Consistency check ──────────────────────────────────────
 
     @app.get("/api/projects/{name}/check/{num}")
