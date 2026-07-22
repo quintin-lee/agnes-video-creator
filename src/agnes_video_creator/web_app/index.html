@@ -228,10 +228,13 @@ const App = {
 
   async renderBatch(){
     this._stopPoll();
-    const el=this.$("#app");el.innerHTML=`<div class="pulse text-muted" style="text-align:center;padding:60px">Loading...</div>`;
+    const el=this.$("#app");
+    const f=this.__batchFilters=this.__batchFilters||{project:"",job_type:"",status:""};
     let data;
-    try{data=await this.api("/api/batch/jobs?limit=100")}
-    catch(e){el.innerHTML=`<div class="empty-state"><p style="color:var(--red)">${e.message}</p></div>`;return}
+    try{
+      const qp="?limit=100"+(f.project?"&project="+encodeURIComponent(f.project):"")+(f.job_type?"&job_type="+encodeURIComponent(f.job_type):"")+(f.status?"&status="+encodeURIComponent(f.status):"");
+      data=await this.api("/api/batch/jobs"+qp)
+    }catch(e){el.innerHTML=`<div class="empty-state"><p style="color:var(--red)">${e.message}</p></div>`;return}
 
     const jobs=data.jobs||[];
     const counts=data.counts||{};
@@ -250,8 +253,29 @@ const App = {
       </tr>`;
     }).join("")||'<tr><td colspan="6" style="text-align:center;color:var(--text3);padding:20px">No jobs.</td></tr>';
 
-    el.innerHTML=`<div class="page-title">Batch Queue</div>
-      <div class="page-sub">${summary||"No jobs"}</div>
+    el.innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:12px">
+      <div><span class="page-title">Batch Queue</span></div>
+      <div>${summary||""}</div></div>
+      <div class="card" style="margin-bottom:12px"><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <input id="bf-project" type="text" placeholder="Filter project..." value="${this.esc(f.project)}" style="background:var(--surface3);border:1px solid var(--border);color:var(--text);border-radius:3px;padding:4px 8px;font-size:.85em;width:140px" oninput="App.__batchFilters.project=this.value">
+        <select id="bf-type" style="background:var(--surface3);border:1px solid var(--border);color:var(--text);border-radius:3px;padding:4px 8px;font-size:.85em" onchange="App.__batchFilters.job_type=this.value">
+          <option value="">All types</option>
+          <option value="analyze" ${f.job_type==="analyze"?"selected":""}>Analyze</option>
+          <option value="render_all" ${f.job_type==="render_all"?"selected":""}>Render All</option>
+          <option value="render_episode" ${f.job_type==="render_episode"?"selected":""}>Render Episode</option>
+          <option value="check" ${f.job_type==="check"?"selected":""}>Check</option>
+        </select>
+        <select id="bf-status" style="background:var(--surface3);border:1px solid var(--border);color:var(--text);border-radius:3px;padding:4px 8px;font-size:.85em" onchange="App.__batchFilters.status=this.value">
+          <option value="">All statuses</option>
+          <option value="pending" ${f.status==="pending"?"selected":""}>Pending</option>
+          <option value="running" ${f.status==="running"?"selected":""}>Running</option>
+          <option value="completed" ${f.status==="completed"?"selected":""}>Completed</option>
+          <option value="failed" ${f.status==="failed"?"selected":""}>Failed</option>
+          <option value="cancelled" ${f.status==="cancelled"?"selected":""}>Cancelled</option>
+        </select>
+        <button class="btn btn-small btn-primary" onclick="App.renderBatch()" style="font-size:.85em">Apply</button>
+        <button class="btn btn-small btn-outline" onclick="App.__batchFilters={project:'',job_type:'',status:''};App.renderBatch()" style="font-size:.85em">Clear</button>
+      </div></div>
       <div class="card"><table class="ep-table" style="width:100%">
         <thead><tr><th>ID</th><th>Status</th><th>Type</th><th>Project</th><th>Created</th><th></th></tr></thead>
         <tbody>${rows}</tbody>

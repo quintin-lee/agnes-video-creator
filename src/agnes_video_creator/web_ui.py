@@ -1068,10 +1068,15 @@ def create_app() -> FastAPI:
         return {"status": "submitted", "job": job.to_dict()}
 
     @app.get("/api/batch/jobs")
-    def batch_list(project: str = Query(""), limit: int = Query(50)):
-        """List recent batch jobs."""
+    def batch_list(
+        project: str = Query(""),
+        job_type: str = Query(""),
+        status: str = Query(""),
+        limit: int = Query(50),
+    ):
+        """List recent batch jobs with optional filters (project, job_type, status)."""
         q = get_queue()
-        jobs = q.list_jobs(project=project, limit=limit)
+        jobs = q.list_jobs(project=project, job_type=job_type, status=status, limit=limit)
         counts = q.count_by_status(project=project)
         return {
             "jobs": [j.to_dict() for j in jobs],

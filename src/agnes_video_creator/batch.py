@@ -199,22 +199,29 @@ class BatchQueue:
         self,
         *,
         project: str = "",
+        job_type: str = "",
+        status: str = "",
         limit: int = 50,
     ) -> list[BatchJob]:
-        """List recent jobs, newest first."""
+        """List recent jobs, newest first. Supports optional filters."""
         with self._lock:
             conn = self._conn()
+            clauses: list[str] = []
+            params: list[str] = []
             if project:
-                rows = conn.execute(
-                    """SELECT * FROM jobs WHERE project = ?
-                        ORDER BY created_at DESC, rowid DESC LIMIT ?""",
-                    (project, limit),
-                ).fetchall()
-            else:
-                rows = conn.execute(
-                    """SELECT * FROM jobs ORDER BY created_at DESC, rowid DESC LIMIT ?""",
-                    (limit,),
-                ).fetchall()
+                clauses.append("project = ?")
+                params.append(project)
+            if job_type:
+                clauses.append("job_type = ?")
+                params.append(job_type)
+            if status:
+                clauses.append("status = ?")
+                params.append(status)
+            where = (" WHERE " + " AND ".join(clauses)) if clauses else ""
+            rows = conn.execute(
+                f"SELECT * FROM jobs{where} ORDER BY created_at DESC, rowid DESC LIMIT ?",
+                (*params, limit),
+            ).fetchall()
             return [self._row_to_job(r) for r in rows]
 
     def get_job(self, job_id: str) -> BatchJob | None:
