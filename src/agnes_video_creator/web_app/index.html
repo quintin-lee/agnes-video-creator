@@ -624,6 +624,61 @@ const App = {
     }
   },
 
+  async showScriptHistory(name,ep){
+    let data;
+    try{data=await this.api("/api/projects/"+encodeURIComponent(name)+"/episodes/"+ep+"/versions")}
+    catch(e){alert("Failed: "+e.message);return}
+    const vers=data.versions||[];
+    if(!vers.length){alert("No version history yet — save the script to create snapshots.");return}
+    const items=vers.map(v=>{
+      const dt=new Date(v.timestamp*1000).toLocaleString();
+      return `<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--border)">
+        <span style="font-size:.85em">${dt}</span>
+        <span class="text-xs text-muted">${v.size_bytes} B</span>
+        <div style="display:flex;gap:4px">
+          <button class="btn btn-small btn-outline" onclick="App.showScriptSnapshot('${this.esc(name)}',${ep},'${v.id}')" style="font-size:.75em">View</button>
+          <button class="btn btn-small btn-outline" onclick="App.showScriptDiff('${this.esc(name)}',${ep},'${v.id}')" style="font-size:.75em">Diff</button>
+        </div></div>`;
+    }).join("");
+    const o=document.createElement("div");o.className="modal-overlay";
+    o.innerHTML=`<div class="modal" style="max-width:600px"><div style="display:flex;justify-content:space-between;align-items:center">
+      <h2 style="margin:0">Script History — EP${ep}</h2>
+      <button class="btn btn-outline" onclick="this.closest('.modal-overlay').remove()" style="font-size:.85em">Close</button></div>
+      <div style="margin-top:12px;max-height:60vh;overflow-y:auto">${items}</div></div>`;
+    document.body.appendChild(o);
+  },
+
+  async showScriptSnapshot(name,ep,versionId){
+    let data;
+    try{data=await this.api("/api/projects/"+encodeURIComponent(name)+"/episodes/"+ep+"/versions/"+versionId)}
+    catch(e){alert("Failed: "+e.message);return}
+    const json=JSON.stringify(data,null,2);
+    const o=document.createElement("div");o.className="modal-overlay";
+    o.innerHTML=`<div class="modal" style="max-width:800px"><div style="display:flex;justify-content:space-between;align-items:center">
+      <h2 style="margin:0">Snapshot ${versionId}</h2>
+      <button class="btn btn-outline" onclick="this.closest('.modal-overlay').remove()" style="font-size:.85em">Close</button></div>
+      <pre style="margin-top:8px;background:var(--surface3);border:1px solid var(--border);border-radius:6px;padding:8px;font-size:.75em;max-height:60vh;overflow:auto;font-family:var(--mono);white-space:pre-wrap">${this.esc(json)}</pre></div>`;
+    document.body.appendChild(o);
+  },
+
+  async showScriptDiff(name,ep,versionId){
+    // Diff this version against the current (latest) script
+    let vers,curr;
+    try{
+      vers=await this.api("/api/projects/"+encodeURIComponent(name)+"/episodes/"+ep+"/versions");
+      const latest=vers.versions?.[0];
+      if(!latest||latest.id===versionId){alert("No newer version to diff against.");return}
+      curr=await this.api("/api/projects/"+encodeURIComponent(name)+"/episodes/"+ep+"/diff?from_id="+versionId+"&to_id="+latest.id);
+    }catch(e){alert("Diff failed: "+e.message);return}
+    const diffText=curr.diff||"(no differences)";
+    const o=document.createElement("div");o.className="modal-overlay";
+    o.innerHTML=`<div class="modal" style="max-width:900px"><div style="display:flex;justify-content:space-between;align-items:center">
+      <h2 style="margin:0">Diff v${versionId} → latest</h2>
+      <button class="btn btn-outline" onclick="this.closest('.modal-overlay').remove()" style="font-size:.85em">Close</button></div>
+      <pre style="margin-top:8px;background:var(--surface3);border:1px solid var(--border);border-radius:6px;padding:8px;font-size:.7em;max-height:65vh;overflow:auto;font-family:var(--mono);white-space:pre-wrap">${this.esc(diffText)}</pre></div>`;
+    document.body.appendChild(o);
+  },
+
   _attachLog(name){
     const lv=document.getElementById("log-viewer");if(!lv)return;
     lv.textContent="";lv.classList.add("cursor");
@@ -714,6 +769,7 @@ const App = {
           ${data.status==="script_ready"||data.status==="images_ready"||data.status==="videos_ready"||data.status==="assembled"?`<a class="btn btn-outline" href="/api/projects/${encodeURIComponent(name)}/storyboard/${ep}" target="_blank">Storyboard</a>`:""}
           <button class="btn btn-small btn-outline" onclick="App.batchSubmit('${this.esc(name)}','render_episode',${ep})" style="font-size:.75em">Queue</button>
           <button class="btn btn-small btn-outline" onclick="App.batchSubmit('${this.esc(name)}','check',${ep})" style="font-size:.75em">Check</button>
+          <button class="btn btn-small btn-outline" onclick="App.showScriptHistory('${this.esc(name)}',${ep})" style="font-size:.75em">History</button>
           ${data.output_path?`<div style="margin-top:8px;border-top:1px solid var(--border);padding-top:8px">
             <span style="font-weight:600;font-size:.85em">Export</span>
             <div style="display:flex;gap:4px;margin-top:4px">

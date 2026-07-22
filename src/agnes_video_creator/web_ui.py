@@ -13,6 +13,7 @@ import json
 import os
 import sys
 import threading
+import time
 from contextlib import asynccontextmanager, suppress
 from pathlib import Path
 from typing import Any
@@ -84,6 +85,19 @@ def _check_installed() -> None:
         raise SystemExit(
             "fastapi and uvicorn are required for the web UI.\nInstall: pip install fastapi uvicorn"
         )
+
+
+def _snapshot_script(script_path: Path) -> str | None:
+    """Copy script JSON to a snapshots/{ep}/ dir, return snapshot id (timestamp)."""
+    snap_dir = script_path.parent / "snapshots"
+    snap_dir.mkdir(parents=True, exist_ok=True)
+    ts = int(time.time())
+    dst = snap_dir / f"script-{ts}.json"
+    try:
+        dst.write_bytes(script_path.read_bytes())
+    except OSError:
+        return None
+    return str(ts)
 
 
 # ── Log capture infrastructure ──────────────────────────────────────────
@@ -732,6 +746,7 @@ def create_app() -> FastAPI:
         if not changed:
             raise HTTPException(400, "No editable fields provided")
 
+        _snapshot_script(Path(ep_info.script_path))
         script.save()
         project.mark_updated()
         project.save()
@@ -785,6 +800,7 @@ def create_app() -> FastAPI:
         for i, s in enumerate(scenes):
             s.id = i + 1
         script.scenes = scenes
+        _snapshot_script(Path(ep_info.script_path))
         script.save()
         project.updated_at = datetime.now(timezone.utc).isoformat()
         project.save()
@@ -822,8 +838,71 @@ def create_app() -> FastAPI:
 
         scene.trim_in = trim_in
         scene.trim_out = trim_out
+        _snapshot_script(Path(ep_info.script_path))
         script.save()
         return {"status": "ok", "scene_id": scene_id, "trim_in": trim_in, "trim_out": trim_out}
+
+    # ── API: Script version snapshots & diff ───────────────────────
+
+    @app.get("/api/projects/{name}/episodes/{num}/versions")
+    def list_script_versions(name: str, num: int):
+        """List saved script snapshots for an episode, newest first."""
+        root = _projects_dir() / name
+        proj_file = root / "project.json"
+        if not proj_file.exists():
+            raise HTTPException(404, "Project not found")
+        project = Project.load(proj_file)
+        ep_info = next((e for e in project.episodes if e.number == num), None)
+        if not ep_info or not ep_info.script_path:
+            raise HTTPException(404, "Episode script not found")
+        snap_dir = Path(ep_info.script_path).parent / "snapshots"
+        if not snap_dir.exists():
+            return {"versions": []}
+        versions = []
+        for f in sorted(snap_dir.glob("script-*.json"), reverse=True):
+            ts = f.stem.replace("script-", "")
+            mtime = f.stat().st_mtime
+            size = f.stat().st_size
+            versions.append({"id": ts, "timestamp": mtime, "size_bytes": size})
+        return {"versions": versions}
+
+    @app.get("/api/projects/{name}/episodes/{num}/versions/{ts}")
+    def get_script_version(name: str, num: int, ts: str):
+        """Get a specific script snapshot."""
+        root = _projects_dir() / name
+        proj_file = root / "project.json"
+        if not proj_file.exists():
+            raise HTTPException(404, "Project not found")
+        project = Project.load(proj_file)
+        ep_info = next((e for e in project.episodes if e.number == num), None)
+        if not ep_info or not ep_info.script_path:
+            raise HTTPException(404, "Episode script not found")
+        snap = Path(ep_info.script_path).parent / "snapshots" / f"script-{ts}.json"
+        if not snap.exists():
+            raise HTTPException(404, "Snapshot not found")
+        return json.loads(snap.read_text())
+
+    @app.get("/api/projects/{name}/episodes/{num}/diff")
+    def diff_script_versions(name: str, num: int, from_id: str = Query(...), to_id: str = Query(...)):
+        """Return unified diff between two script snapshot versions."""
+        root = _projects_dir() / name
+        proj_file = root / "project.json"
+        if not proj_file.exists():
+            raise HTTPException(404, "Project not found")
+        project = Project.load(proj_file)
+        ep_info = next((e for e in project.episodes if e.number == num), None)
+        if not ep_info or not ep_info.script_path:
+            raise HTTPException(404, "Episode script not found")
+        snap_dir = Path(ep_info.script_path).parent / "snapshots"
+        from_f = snap_dir / f"script-{from_id}.json"
+        to_f = snap_dir / f"script-{to_id}.json"
+        if not from_f.exists() or not to_f.exists():
+            raise HTTPException(404, "Snapshot not found")
+        import difflib
+        from_lines = from_f.read_text().splitlines(keepends=True)
+        to_lines = to_f.read_text().splitlines(keepends=True)
+        diff = list(difflib.unified_diff(from_lines, to_lines, fromfile=f"v{from_id}", tofile=f"v{to_id}", n=3))
+        return {"diff": "".join(diff)}
 
     # ── API: Voice-map assignment ───────────────────────────────────
 
