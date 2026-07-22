@@ -484,6 +484,14 @@ const App = {
     catch(e){alert("Failed: "+e.message);if(b)b.disabled=false}
   },
 
+  async regenSceneVideo(name,ep,sceneId){
+    if(!confirm("Regenerate video for scene "+sceneId+"?"))return;
+    const b=document.getElementById("btn-render-ep"+ep);if(b)b.disabled=true;
+    try{await this.api("/api/projects/"+encodeURIComponent(name)+"/render",{method:"POST",body:JSON.stringify({episode:ep})});
+      this._pollEpisode(name,ep)}
+    catch(e){alert("Failed: "+e.message);if(b)b.disabled=false}
+  },
+
   async runCheck(name){
     const cr=document.getElementById("check-results");if(!cr)return;
     cr.innerHTML='<span class="pulse text-muted">Checking...</span>';
@@ -665,7 +673,7 @@ const App = {
         <div style="margin-top:4px"><textarea class="edit-prompt" rows="2" style="width:100%;background:var(--surface3);border:1px solid var(--border);color:var(--text2);border-radius:4px;padding:4px;font-size:.8em;font-family:var(--mono);resize:vertical">${this.esc(s.visual_prompt||"")}</textarea></div>
         ${dials}${tags?`<div class="tags">${tags}</div>`:""}
         <div class="si" style="display:flex;align-items:center;flex-wrap:wrap;gap:4px;margin-top:6px">
-          <span><span class="d ${s.is_image_ready?"ok":"no"}"></span>img <span class="d ${s.is_video_ready?"ok":"no"}"></span>vid</span>
+          <span><span class="d ${s.is_image_ready?"ok":"no"}"></span>img <span class="d ${s.is_video_ready?"ok":"no"}"></span>vid${s.is_video_ready?` <button class="btn btn-small btn-outline" onclick="App.regenSceneVideo('${this.esc(name)}',${ep},${s.id})" style="font-size:.7em;padding:1px 4px" title="Regenerate video for this scene">regen</button>`:""}</span>
           <span class="text-xs text-muted" style="margin-left:auto">Trim:
             <input class="trim-in-${s.id}" type="number" step="0.1" min="0" max="30" value="${(s.trim_in||0).toFixed(1)}" title="Trim from start (seconds)" style="width:36px;background:var(--surface3);border:1px solid var(--border);color:var(--text);border-radius:3px;padding:1px 3px;font-size:.8em">in
             <input class="trim-out-${s.id}" type="number" step="0.1" min="0" max="30" value="${(s.trim_out||0).toFixed(1)}" title="Trim from end (seconds)" style="width:36px;background:var(--surface3);border:1px solid var(--border);color:var(--text);border-radius:3px;padding:1px 3px;font-size:.8em">out
