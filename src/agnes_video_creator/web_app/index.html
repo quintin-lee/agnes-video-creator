@@ -121,6 +121,8 @@ a:hover{text-decoration:underline}
 .scene-card .si .d{width:6px;height:6px;border-radius:50%}
 .scene-card .si .d.ok{background:var(--accent)}
 .scene-card .si .d.no{background:var(--text3)}
+.scene-card.dragging{opacity:.4}
+.scene-card.drag-over{border-color:var(--accent)!important;box-shadow:0 0 0 2px var(--accent)}
 
 .ep-header{margin-bottom:20px}
 .ep-header h2{font-size:1.2em;font-weight:600}
@@ -428,6 +430,17 @@ const App = {
   },
 
   async toggleSceneLock(name,ep,sceneId){
+
+  async reorderScenes(name,ep,draggedId,targetId){
+    if(draggedId===targetId)return;
+    try{
+      await this.api("/api/projects/"+encodeURIComponent(name)+"/episodes/"+ep+"/reorder",
+        {method:"PUT",body:JSON.stringify({dragged_id:draggedId,target_id:targetId})});
+      this.loadEpisode(name,ep);
+    }catch(e){alert("Reorder failed: "+e.message)}
+  },
+
+  async toggleSceneLock(name,ep,sceneId){
     const el=document.getElementById("scene-edit-"+sceneId);
     if(!el)return;
     const currentlyLocked=el.dataset.locked==="true";
@@ -542,7 +555,12 @@ const App = {
       const vidSrc=s.video_rel?"/api/projects/"+encodeURIComponent(name)+"/videos/"+s.video_rel:"";
       const dials=(s.dialogues||[]).map(d=>`<div class="dial"><span class="cn">${this.esc(d.character||"")}</span>: ${this.esc(d.line||"")}</div>`).join("");
       const tags=(s.character_appearances||[]).map(c=>`<span class="tag">${this.esc(c)}</span>`).join("");
-      return `<div class="scene-card" id="scene-edit-${s.id}" data-locked="${s.locked}" style="${s.locked?'border-color:var(--accent)':''}"><div class="img-wrap">${
+      return `<div class="scene-card" id="scene-edit-${s.id}" draggable="true" data-locked="${s.locked}" style="${s.locked?'border-color:var(--accent)':''}"
+          ondragstart="event.dataTransfer.setData('text/plain','${s.id}');this.classList.add('dragging')"
+          ondragend="this.classList.remove('dragging')"
+          ondragover="event.preventDefault();this.parentNode.querySelectorAll('.scene-card').forEach(c=>c.classList.remove('drag-over'));this.classList.add('drag-over')"
+          ondragleave="this.classList.remove('drag-over')"
+          ondrop="event.preventDefault();App.reorderScenes('${this.esc(name)}',${ep},parseInt(event.dataTransfer.getData('text/plain')),${s.id})"><div class="img-wrap">${
         vidSrc?`<video src="${vidSrc}" controls preload="metadata" style="width:100%;height:100%;object-fit:contain"></video>`
         :imgSrc?`<img src="${imgSrc}" alt="Scene ${s.id}" loading="lazy">`
         :`<div class="ph">(no image)</div>`

@@ -716,6 +716,58 @@ def create_app() -> FastAPI:
 
         return {"status": "ok", "scene_id": scene_id}
 
+    # ── API: Scene reorder (drag-and-drop) ─────────────────────────
+
+    @app.put("/api/projects/{name}/episodes/{num}/reorder")
+    async def reorder_scenes(name: str, num: int, request: Request):
+        """Move a scene before another in the episode script.
+
+        Expects ``{"dragged_id": 5, "target_id": 2}`` — moves scene 5
+        to the position of scene 2, shifting others down.
+        """
+        root = _projects_dir() / name
+        proj_file = root / "project.json"
+        if not proj_file.exists():
+            raise HTTPException(404, f"Project '{name}' not found")
+
+        project = Project.load(proj_file)
+        ep_info: EpisodeInfo | None = None
+        for ep in project.episodes:
+            if ep.number == num:
+                ep_info = ep
+                break
+        if not ep_info or not ep_info.script_path or not Path(ep_info.script_path).exists():
+            raise HTTPException(404, f"Episode {num} script not found")
+
+        try:
+            body = await request.json()
+        except Exception:
+            raise HTTPException(422, "Invalid JSON body") from None
+
+        dragged_id = body.get("dragged_id")
+        target_id = body.get("target_id")
+        if not isinstance(dragged_id, int) or not isinstance(target_id, int):
+            raise HTTPException(400, "'dragged_id' and 'target_id' must be ints")
+
+        script = Script.load(ep_info.script_path)
+        scenes = list(script.scenes)
+        src_idx = next((i for i, s in enumerate(scenes) if s.id == dragged_id), -1)
+        dst_idx = next((i for i, s in enumerate(scenes) if s.id == target_id), -1)
+        if src_idx < 0 or dst_idx < 0:
+            raise HTTPException(400, "Scene ID not found")
+
+        scene = scenes.pop(src_idx)
+        insert_pos = dst_idx if dst_idx < src_idx else dst_idx - 1
+        scenes.insert(insert_pos, scene)
+
+        for i, s in enumerate(scenes):
+            s.id = i + 1
+        script.scenes = scenes
+        script.save()
+        project.updated_at = datetime.now(timezone.utc).isoformat()
+        project.save()
+        return {"status": "ok", "scene_ids": [s.id for s in scenes]}
+
     # ── API: Scene trim ─────────────────────────────────────────────
 
     @app.put("/api/projects/{name}/episodes/{num}/scene/{scene_id}/trim")
