@@ -282,6 +282,29 @@ const App = {
     document.body.appendChild(o);setTimeout(()=>document.getElementById("np-name")?.focus(),100);
   },
 
+  showPortrait(url,name){
+    const o=document.createElement("div");o.className="modal-overlay";
+    o.innerHTML=`<div class="modal" style="max-width:90vw;text-align:center"><h2>${name}</h2>
+      <img src="${this.esc(url)}" alt="${name}" style="max-width:100%;max-height:70vh;border-radius:6px;margin:12px 0">
+      <div class="acts"><button class="btn btn-outline" onclick="this.closest('.modal-overlay').remove()">Close</button></div></div>`;
+    document.body.appendChild(o);
+  },
+
+  showCharacterGallery(){
+    const chars=this.__charData||[];
+    const items=chars.filter(c=>c.portrait_url).map(c=>`<div style="text-align:center;border:1px solid var(--border);border-radius:8px;padding:8px;background:var(--surface2)">
+      <img src="${this.esc(c.portrait_url)}" alt="${this.esc(c.name)}" style="width:160px;height:160px;object-fit:cover;border-radius:6px;cursor:pointer" onclick="App.showPortrait('${this.esc(c.portrait_url)}','${this.esc(c.name)}')">
+      <div style="margin-top:4px;font-size:.9em;font-weight:600">${this.esc(c.name)}</div>
+      <div class="text-muted text-xs">${this.esc(c.role||"")}</div></div>`).join("");
+    if(!items){alert("No character portraits available.");return}
+    const o=document.createElement("div");o.className="modal-overlay";
+    o.innerHTML=`<div class="modal" style="max-width:90vw"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+      <h2 style="margin:0">Character Gallery</h2>
+      <button class="btn btn-outline" onclick="this.closest('.modal-overlay').remove()" style="font-size:.85em">Close</button></div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px;max-height:70vh;overflow-y:auto">${items}</div></div>`;
+    document.body.appendChild(o);
+  },
+
   async createProject(){
     const n=document.getElementById("np-name")?.value?.trim();if(!n)return alert("Name required");
     const novel=document.getElementById("np-novel")?.value?.trim()||"";
@@ -309,6 +332,7 @@ const App = {
           <a href="#" onclick="event.stopPropagation();App.exportEpisode('${this.esc(name)}',${e.number},'1:1')" title="Export 1:1" style="color:var(--accent);text-decoration:none">sq</a>
         </span>`:"\u2014"}</td></tr>`).join("")||'<tr><td colspan="5" style="text-align:center;color:var(--text3);padding:20px">No episodes</td></tr>';
 
+    this.__charData=data.characters;
     const charItems=(data.characters||[]).map(c=>{
       const _n=this.esc(c.name);
       return `<details class="char-sheet" style="border:1px solid var(--border);border-radius:6px;margin-bottom:6px;padding:6px 8px">
@@ -328,7 +352,7 @@ const App = {
           <textarea class="cs-${_n}-dialogue" rows="2" style="width:100%;background:var(--surface3);border:1px solid var(--border);color:var(--text2);border-radius:3px;padding:2px 6px;font-size:.8em;resize:vertical">${this.esc(c.sample_dialogue||"")}</textarea>
           <label class="text-xs text-muted">Backstory</label>
           <textarea class="cs-${_n}-backstory" rows="2" style="width:100%;background:var(--surface3);border:1px solid var(--border);color:var(--text2);border-radius:3px;padding:2px 6px;font-size:.8em;resize:vertical">${this.esc(c.backstory||"")}</textarea>
-          ${c.portrait_url?`<div style="margin-top:4px"><img src="${this.esc(c.portrait_url)}" alt="${_n}" style="width:60px;height:60px;object-fit:cover;border-radius:4px;border:1px solid var(--border)"></div>`:""}
+          ${c.portrait_url?`<div style="margin-top:6px"><img src="${this.esc(c.portrait_url)}" alt="${_n}" style="width:120px;height:120px;object-fit:cover;border-radius:6px;border:1px solid var(--border);cursor:pointer" onclick="App.showPortrait('${this.esc(c.portrait_url)}','${_n}')"></div>`:""}
         </div>
       </details>`;
     }).join("")||'<div class="empty">No characters</div>';
@@ -355,7 +379,7 @@ const App = {
             <button class="btn btn-small btn-outline" onclick="App.batchSubmit('${this.esc(name)}','check',0)">Check All</button>
           </div>
           <div id="check-results" class="text-sm mt-2"></div></div>
-        <div class="card"><h2>Characters (${(data.characters||[]).length})</h2><div class="char-list">${charItems}</div><div class="mt-2" style="display:flex;align-items:center;gap:8px"><button class="btn btn-small btn-primary" onclick="App.saveCharacterSheets('${this.esc(name)}')">Save All</button><span id="char-feedback" class="text-sm"></span></div></div>
+        <div class="card"><h2>Characters (${(data.characters||[]).length})</h2><div class="char-list">${charItems}</div><div class="mt-2" style="display:flex;align-items:center;gap:8px"><button class="btn btn-small btn-primary" onclick="App.saveCharacterSheets('${this.esc(name)}')">Save All</button><button class="btn btn-small btn-outline" onclick="App.showCharacterGallery()">Gallery</button><span id="char-feedback" class="text-sm"></span></div></div>
         <div class="card"><h2>Info</h2><div class="text-sm" style="line-height:1.8">
           <div><span class="text-muted">Root:</span> ${this.esc(data.root)}</div>
           <div><span class="text-muted">Novel:</span> ${data.has_novel?"\u2713":"\u2014"}</div>
