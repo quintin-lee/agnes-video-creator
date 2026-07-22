@@ -429,8 +429,6 @@ const App = {
     }catch(e){alert("Save failed: "+e.message)}
   },
 
-  async toggleSceneLock(name,ep,sceneId){
-
   async reorderScenes(name,ep,draggedId,targetId){
     if(draggedId===targetId)return;
     try{
