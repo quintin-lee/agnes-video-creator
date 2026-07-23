@@ -245,19 +245,46 @@ const App = {
     try{projects=(await this.api("/api/projects")).projects}
     catch(e){el.innerHTML=`<div class="empty-state"><p style="color:var(--red)">${this.esc(e.message)}</p></div>`;return}
     let html=`<div class="page-title">Projects</div>
-      <div class="page-sub">${projects.length} project(s) found</div>
-      <div style="margin-bottom:16px"><button class="btn btn-primary" onclick="App.showNewProject()">+ New Project</button></div>`;
+      <div class="page-sub" id="proj-count">${projects.length} project(s) found</div>
+      <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap">
+        <input id="proj-search" type="text" placeholder="Search projects..." oninput="App._filterProjects()" style="flex:1;min-width:200px;background:var(--surface3);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:8px 12px;font-size:.9em">
+        <button class="btn btn-primary" onclick="App.showNewProject()">+ New Project</button>
+      </div>`;
+    this.__projects=projects;
     if(projects.length===0)html+=`<div class="empty-state"><p>No projects found.</p><p class="text-sm text-muted">Create with <code>agnes-video project init</code>.</p></div>`;
-    else{html+='<div class="project-grid">';
+    else{html+='<div class="project-grid" id="proj-grid">';
       for(const p of projects){
         const sm=p.status_summary||{};
         const badges=Object.entries(sm).map(([k,v])=>`<span class="stat-badge ${k}">${k}:${v}</span>`).join("")||'<span class="stat-badge">no episodes</span>';
-        html+=`<div class="project-card" onclick="App.navigate('/projects/${encodeURIComponent(p.name)}')">
+        html+=`<div class="project-card" data-proj='${this.esc(JSON.stringify(p).replace(/'/g,"&#39;"))}' onclick="App.navigate('/projects/${encodeURIComponent(p.name)}')">
           <h3>${this.esc(p.name)}</h3>
           <div class="meta">${p.episode_count} ep(s) &middot; ${p.created_at||""}</div>
           <div class="stats">${badges}</div></div>`;
       }html+="</div>";}
     el.innerHTML=html;
+  },
+
+  __projects: [],
+  _filterProjects(){
+    const q=document.getElementById("proj-search")?.value?.toLowerCase()||"";
+    const grid=document.getElementById("proj-grid");
+    if(!grid)return;
+    const cards=grid.querySelectorAll(".project-card");
+    let visible=0;
+    cards.forEach(card=>{
+      try{
+        const p=JSON.parse(card.dataset.proj);
+        const match=!q||p.name.toLowerCase().includes(q)
+          ||(p.style||"").toLowerCase().includes(q)
+          ||(p.mood||"").toLowerCase().includes(q)
+          ||(p.target||"").toLowerCase().includes(q)
+          ||(p.video_mode||"").toLowerCase().includes(q);
+        card.style.display=match?"":"none";
+        if(match)visible++;
+      }catch(e){card.style.display=""}
+    });
+    const c=document.getElementById("proj-count");
+    if(c)c.textContent=visible+" project(s) found";
   },
 
   bsc(s){return s==="completed"?"completed":s==="failed"?"failed":s==="running"?"running":s==="cancelled"?"cancelled":"pending"},
