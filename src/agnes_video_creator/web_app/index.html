@@ -764,6 +764,20 @@ const App = {
     es.onerror=()=>{};
   },
 
+  filterScenes(query){
+    const grid=document.getElementById("scene-grid");
+    if(!grid)return;
+    const q=query.toLowerCase().trim();
+    let count=0;
+    grid.querySelectorAll(".scene-card").forEach(card=>{
+      const match=!q||(card.dataset.search||"").toLowerCase().includes(q);
+      card.style.display=match?"":"none";
+      if(match)count++;
+    });
+    const counter=document.getElementById("scene-count");
+    if(counter)counter.textContent=q?`${count} matching`:"";
+  },
+
   _pollProject(name){
     this._stopPoll();
     this._poller=setInterval(async()=>{
@@ -800,7 +814,7 @@ const App = {
       const vidSrc=s.video_rel?"/api/projects/"+encodeURIComponent(name)+"/videos/"+s.video_rel:"";
       const dials=(s.dialogues||[]).map(d=>`<div class="dial"><span class="cn">${this.esc(d.character||"")}</span>: ${this.esc(d.line||"")}</div>`).join("");
       const tags=(s.character_appearances||[]).map(c=>`<span class="tag">${this.esc(c)}</span>`).join("");
-      return `<div class="scene-card" id="scene-edit-${s.id}" draggable="true" data-locked="${s.locked}" style="${s.locked?'border-color:var(--accent)':''}"
+      return `<div class="scene-card" id="scene-edit-${s.id}" data-search="${this.esc((s.narration||"")+" "+(s.dialogues||[]).map(d=>(d.character||"")+" "+(d.line||"")).join(" ")+" "+(s.visual_prompt||""))}" draggable="true" data-locked="${s.locked}" style="${s.locked?'border-color:var(--accent)':''}"
           ondragstart="event.dataTransfer.setData('text/plain','${s.id}');this.classList.add('dragging')"
           ondragend="this.classList.remove('dragging')"
           ondragover="event.preventDefault();this.parentNode.querySelectorAll('.scene-card').forEach(c=>c.classList.remove('drag-over'));this.classList.add('drag-over')"
@@ -852,7 +866,13 @@ const App = {
       ${sc?.style_guide?" &middot; "+this.esc(sc.style_guide):""}</div></div></div>
 
       <div class="two-col"><div class="main">
-        <div class="card"><h2>Scenes</h2>${timelineBar}<div class="scene-grid">${sceneCards}</div></div>
+        <div class="card"><h2>Scenes</h2>
+          <div style="display:flex;gap:6px;margin-bottom:10px">
+            <input id="scene-search" type="text" placeholder="Search scenes by narration, dialogue, or prompt..." oninput="App.filterScenes(this.value)"
+              style="flex:1;background:var(--surface3);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:5px 8px;font-size:.85em">
+            <span id="scene-count" class="text-sm text-muted" style="align-self:center"></span>
+          </div>
+          ${timelineBar}<div class="scene-grid" id="scene-grid">${sceneCards}</div></div>
         ${data.output_path?`<div class="card"><h2>Output</h2><div class="text-sm"><a href="/${data.output_path}" target="_blank">${this.esc(data.output_path)}</a></div></div>`:""}
       </div>      <div class="side">
         <div class="card"><h2>Controls</h2><div class="controls">
