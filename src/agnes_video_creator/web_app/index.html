@@ -697,6 +697,85 @@ const App = {
     }
   },
 
+  async showScriptEditor(name,ep){
+    let data;
+    try{data=await this.api("/api/projects/"+encodeURIComponent(name)+"/episodes/"+ep)}
+    catch(e){alert("Failed: "+e.message);return}
+    const scenes=data.script?.scenes||[];
+    if(!scenes.length){alert("No scenes to edit.");return}
+    const blocks=scenes.map(s=>{
+      const dials=(s.dialogues||[]).map(d=>`<div style="display:flex;gap:4px;margin:2px 0">
+        <input class="sed-char-${s.id}" value="${this.esc(d.character||"")}" placeholder="Character" style="width:100px;background:var(--surface3);border:1px solid var(--border);color:var(--text);border-radius:3px;padding:2px 6px;font-size:.85em">
+        <input class="sed-line-${s.id}" value="${this.esc(d.line||"")}" placeholder="Dialogue line" style="flex:1;background:var(--surface3);border:1px solid var(--border);color:var(--text2);border-radius:3px;padding:2px 6px;font-size:.85em">
+      </div>`).join("");
+      return `<div class="scene-card" style="margin-bottom:10px;border-color:var(--border)">
+        <div class="body">
+          <div class="num" style="display:flex;justify-content:space-between;align-items:center">
+            <span>Scene ${s.id} &middot; <input class="sed-dur-${s.id}" type="number" step="0.5" min="1" max="60" value="${s.duration_seconds.toFixed(1)}" style="width:50px;background:var(--surface3);border:1px solid var(--border);color:var(--text);border-radius:3px;padding:1px 4px;font-size:.85em">s &middot; ${this.esc(s.camera||"static")} &middot; ${this.esc(s.style||"")}</span>
+            <span class="text-xs text-muted">${s.locked?'🔒':''}</span>
+          </div>
+          <div style="margin-top:6px">
+            <label class="text-xs text-muted">Narration</label>
+            <textarea class="sed-narr-${s.id}" rows="2" style="width:100%;background:var(--surface3);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:4px;font-size:.85em;font-family:var(--font);resize:vertical">${this.esc(s.narration||"")}</textarea>
+          </div>
+          ${dials?`<div style="margin-top:4px"><label class="text-xs text-muted">Dialogues</label>${dials}</div>`:""}
+          <div style="margin-top:4px">
+            <label class="text-xs text-muted">Visual Prompt</label>
+            <textarea class="sed-prompt-${s.id}" rows="2" style="width:100%;background:var(--surface3);border:1px solid var(--border);color:var(--text2);border-radius:4px;padding:4px;font-size:.8em;font-family:var(--mono);resize:vertical">${this.esc(s.visual_prompt||"")}</textarea>
+          </div>
+        </div></div>`;
+    }).join("");
+    const o=document.createElement("div");o.className="modal-overlay";
+    o.style="z-index:200";
+    o.innerHTML=`<div class="modal" style="max-width:900px;max-height:90vh;display:flex;flex-direction:column">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-shrink:0">
+        <h2 style="margin:0">Script Editor — EP${ep}</h2>
+        <div style="display:flex;gap:6px">
+          <button id="sed-save-btn" class="btn btn-primary" onclick="App.saveScriptEditor('${this.esc(name)}',${ep})">Save All Changes</button>
+          <button class="btn btn-outline" onclick="this.closest('.modal-overlay').remove()">Close</button>
+        </div>
+      </div>
+      <div style="margin-top:12px;overflow-y:auto;flex:1;padding-right:4px">${blocks}</div>
+      <div id="sed-feedback" class="text-sm text-muted" style="margin-top:8px;flex-shrink:0"></div>
+    </div>`;
+    document.body.appendChild(o);
+  },
+
+  async saveScriptEditor(name,ep){
+    const fb=document.getElementById("sed-feedback");
+    const btn=document.getElementById("sed-save-btn");
+    if(!fb||!btn)return;
+    fb.textContent="Saving...";btn.disabled=true;
+    const cards=document.querySelectorAll(".modal .scene-card");
+    let ok=0,err=0;
+    for(const card of cards){
+      const idEl=card.querySelector(".num");
+      if(!idEl)continue;
+      const idMatch=idEl.textContent?.match(/Scene\s+(\d+)/);
+      if(!idMatch)continue;
+      const id=parseInt(idMatch[1]);
+      const narration=card.querySelector(".sed-narr-"+id)?.value??"";
+      const visualPrompt=card.querySelector(".sed-prompt-"+id)?.value??"";
+      const dur=parseFloat(card.querySelector(".sed-dur-"+id)?.value)||5;
+      const charEls=card.querySelectorAll(".sed-char-"+id);
+      const lineEls=card.querySelectorAll(".sed-line-"+id);
+      const dialogues=[];
+      for(let i=0;i<charEls.length;i++){
+        const ch=(charEls[i]?.value||"").trim();
+        const ln=(lineEls[i]?.value||"").trim();
+        if(ch||ln)dialogues.push({character:ch||"",line:ln||""});
+      }
+      try{
+        await this.api("/api/projects/"+encodeURIComponent(name)+"/episodes/"+ep+"/scene/"+id,
+          {method:"PUT",body:JSON.stringify({narration,visual_prompt,duration_seconds:dur,dialogues})});
+        ok++;
+      }catch(e){err++}
+    }
+    fb.textContent=err?`\u2713 ${ok} saved, ${err} failed.`:`\u2713 All ${ok} scenes saved.`;
+    btn.disabled=false;
+    if(!err)setTimeout(()=>document.querySelector(".modal-overlay")?.remove(),1200);
+  },
+
   async showScriptHistory(name,ep){
     let data;
     try{data=await this.api("/api/projects/"+encodeURIComponent(name)+"/episodes/"+ep+"/versions")}
@@ -881,6 +960,7 @@ const App = {
           <button class="btn btn-small btn-outline" onclick="App.batchSubmit('${this.esc(name)}','render_episode',${ep})" style="font-size:.75em">Queue</button>
           <button class="btn btn-small btn-outline" onclick="App.batchSubmit('${this.esc(name)}','check',${ep})" style="font-size:.75em">Check</button>
           <button class="btn btn-small btn-outline" onclick="App.showScriptHistory('${this.esc(name)}',${ep})" style="font-size:.75em">History</button>
+          <button class="btn btn-small btn-outline" onclick="App.showScriptEditor('${this.esc(name)}',${ep})" style="font-size:.75em">Script Editor</button>
           ${data.output_path?`<div style="margin-top:8px;border-top:1px solid var(--border);padding-top:8px">
             <span style="font-weight:600;font-size:.85em">Export</span>
             <div style="display:flex;gap:4px;margin-top:4px">
