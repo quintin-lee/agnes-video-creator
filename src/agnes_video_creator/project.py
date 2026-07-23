@@ -178,7 +178,10 @@ class Project:
         return cls(episodes=episodes, **data)
 
     def reorder_episodes(self, new_order: list[int]) -> None:
-        """Reorder episodes by their numbers. new_order must be a permutation of existing episode numbers."""
+        """Reorder episodes by their numbers.
+
+        new_order must be a permutation of existing episode numbers.
+        """
         by_num = {e.number: e for e in self.episodes}
         if set(by_num) != set(new_order):
             raise ValueError("new_order must include all episode numbers exactly once")
@@ -344,8 +347,10 @@ class Project:
         if not skip_images and ep.status in ("script_ready", "pending", "images_ready"):
             need_ids = _unfinished_scene_ids("is_image_ready")
             if need_ids:
-                _log(f"\n  [{num}] Generating images ({len(need_ids)} scenes, "
-                     f"{len(script.scenes) - len(need_ids)} locked/ready skipped)...")
+                _log(
+                    f"\n  [{num}] Generating images ({len(need_ids)} scenes, "
+                    f"{len(script.scenes) - len(need_ids)} locked/ready skipped)..."
+                )
                 script = generate_scene_images(script, cfg=cfg, scene_ids=need_ids, verbose=verbose)
                 ep.advance()
             else:
@@ -372,8 +377,10 @@ class Project:
         if not skip_video and ep.status in ("images_ready", "script_ready", "videos_ready"):
             need_video_ids = _unfinished_scene_ids("is_video_ready")
             if need_video_ids:
-                _log(f"\n  [{num}] Generating videos ({len(need_video_ids)} scenes, "
-                     f"{len(script.scenes) - len(need_video_ids)} locked/ready skipped)...")
+                _log(
+                    f"\n  [{num}] Generating videos ({len(need_video_ids)} scenes, "
+                    f"{len(script.scenes) - len(need_video_ids)} locked/ready skipped)..."
+                )
                 script = generate_video_clips(
                     script,
                     cfg=cfg,

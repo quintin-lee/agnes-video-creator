@@ -216,8 +216,14 @@ class BatchQueue:
             conn.execute(
                 """INSERT INTO jobs (id, job_type, project, status, episode_num, created_at)
                    VALUES (?, ?, ?, ?, ?, ?)""",
-                (new_job.id, new_job.job_type, new_job.project, new_job.status,
-                 new_job.episode_num, new_job.created_at),
+                (
+                    new_job.id,
+                    new_job.job_type,
+                    new_job.project,
+                    new_job.status,
+                    new_job.episode_num,
+                    new_job.created_at,
+                ),
             )
             conn.commit()
         return new_job

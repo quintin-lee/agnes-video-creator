@@ -32,7 +32,6 @@ _KEYWORD_SFX: dict[str, str] = {
     "waves": "waves crashing",
     "river": "water flowing",
     "waterfall": "water flowing",
-    "rain": "rain falling",
     "fire": "fire crackling",
     "burning": "fire crackling",
     "explosion": "explosion",
@@ -108,7 +107,6 @@ _KEYWORD_SFX: dict[str, str] = {
     "airplane": "airplane flyby",
     "plane": "airplane flyby",
     "helicopter": "helicopter",
-    "helicopter": "helicopter",
     "ship": "ship horn",
     "boat": "boat engine",
     # Ambience
@@ -132,7 +130,6 @@ _KEYWORD_SFX: dict[str, str] = {
     "magic": "magic spell",
     "spell": "magic spell",
     "whoosh": "whoosh",
-    "whoosh": "whoosh",
     "dragon": "dragon roar",
     "roar": "dragon roar",
     "monster": "monster roar",
@@ -142,8 +139,16 @@ _KEYWORD_SFX: dict[str, str] = {
 
 # ── Priority keywords (higher weight in scoring) ──────────────────────
 _PRIORITY_KW: set[str] = {
-    "explosion", "gunshot", "scream", "applause", "thunder",
-    "door slam", "alarm", "siren", "roar", "magic",
+    "explosion",
+    "gunshot",
+    "scream",
+    "applause",
+    "thunder",
+    "door slam",
+    "alarm",
+    "siren",
+    "roar",
+    "magic",
 }
 
 
@@ -218,7 +223,13 @@ def auto_fill_sfx(script: Script, cfg: AgnesConfig, *, verbose: bool = True) -> 
                     {
                         "model": cfg.text_model,
                         "messages": [
-                            {"role": "system", "content": "You suggest sound effects for video scenes. Return only the SFX description."},
+                            {
+                                "role": "system",
+                                "content": (
+                                    "You suggest sound effects for video scenes. "
+                                    "Return only the SFX description."
+                                ),
+                            },
                             {"role": "user", "content": prompt_body},
                         ],
                         "temperature": 0.1,
@@ -234,6 +245,7 @@ def auto_fill_sfx(script: Script, cfg: AgnesConfig, *, verbose: bool = True) -> 
                 pass
 
         if filled and verbose:
-            print(f"  sfx-matcher: LLM filled {filled - (filled - len(scenes_missing) + len([s for s in scenes_missing if s.sfx]))} scene(s)", file=sys.stderr)
+            llm_filled = sum(1 for s in scenes_missing if s.sfx)
+            print(f"  sfx-matcher: LLM filled {llm_filled} scene(s)", file=sys.stderr)
 
     return script

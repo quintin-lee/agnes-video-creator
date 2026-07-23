@@ -15,6 +15,7 @@ import sys
 import threading
 import time
 from contextlib import asynccontextmanager, suppress
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -269,15 +270,20 @@ def create_app() -> FastAPI:
                 continue
             src = Path(ep.output_path)
             exported = batch_export(src, root, aspects=aspects, verbose=False)
-            results.append({
-                "episode": ep.number,
-                "title": ep.title or "",
-                "exports": [
-                    {"aspect": a, "path": str(p.relative_to(root)),
-                     "url": f"/api/projects/{name}/videos/{p.name}"}
-                    for a, p in exported.items()
-                ],
-            })
+            results.append(
+                {
+                    "episode": ep.number,
+                    "title": ep.title or "",
+                    "exports": [
+                        {
+                            "aspect": a,
+                            "path": str(p.relative_to(root)),
+                            "url": f"/api/projects/{name}/videos/{p.name}",
+                        }
+                        for a, p in exported.items()
+                    ],
+                }
+            )
 
         return {"status": "ok", "episodes": results, "total": len(results)}
 
@@ -409,7 +415,16 @@ def create_app() -> FastAPI:
         except Exception:
             raise HTTPException(422, "Invalid JSON body") from None
 
-        for field in ("style_guide", "mood", "target_audience", "video_mode", "parallel", "max_workers", "preview_storyboard"):
+        fields = (
+            "style_guide",
+            "mood",
+            "target_audience",
+            "video_mode",
+            "parallel",
+            "max_workers",
+            "preview_storyboard",
+        )
+        for field in fields:
             if field in body:
                 setattr(project, field, body[field])
         project.updated_at = datetime.now(timezone.utc).isoformat()
@@ -765,26 +780,30 @@ def create_app() -> FastAPI:
                 for s in scenes:
                     label = s.narration or s.visual_prompt or f"Scene {s.id}"
                     if s.image_path and Path(s.image_path).exists():
-                        rel = Path(s.image_path).relative_to(root)
-                        items.append({
-                            "type": "image",
-                            "project": pname,
-                            "episode": ep_num,
-                            "scene_id": s.id,
-                            "path": str(s.image_path),
-                            "url": f"/api/projects/{pname}/images/{ep_num}/images/{Path(s.image_path).name}",
-                            "label": label[:80],
-                        })
+                        img_name = Path(s.image_path).name
+                        items.append(
+                            {
+                                "type": "image",
+                                "project": pname,
+                                "episode": ep_num,
+                                "scene_id": s.id,
+                                "path": str(s.image_path),
+                                "url": f"/api/projects/{pname}/images/{ep_num}/images/{img_name}",
+                                "label": label[:80],
+                            }
+                        )
                     if s.video_path and Path(s.video_path).exists():
-                        items.append({
-                            "type": "video",
-                            "project": pname,
-                            "episode": ep_num,
-                            "scene_id": s.id,
-                            "path": str(s.video_path),
-                            "url": f"/api/projects/{pname}/videos/{Path(s.video_path).name}",
-                            "label": label[:80],
-                        })
+                        items.append(
+                            {
+                                "type": "video",
+                                "project": pname,
+                                "episode": ep_num,
+                                "scene_id": s.id,
+                                "path": str(s.video_path),
+                                "url": f"/api/projects/{pname}/videos/{Path(s.video_path).name}",
+                                "label": label[:80],
+                            }
+                        )
         if media_type:
             items = [a for a in items if a["type"] == media_type]
         filtered = items
@@ -795,7 +814,11 @@ def create_app() -> FastAPI:
     @app.get("/api/usage")
     def usage_report():
         """Aggregate actual API usage across all projects."""
-        from agnes_video_creator.cost_estimator import PRICE_PER_IMAGE, PRICE_PER_VIDEO_CLIP, PRICE_PER_TEXT_CALL
+        from agnes_video_creator.cost_estimator import (
+            PRICE_PER_IMAGE,
+            PRICE_PER_TEXT_CALL,
+            PRICE_PER_VIDEO_CLIP,
+        )
 
         root = _projects_dir()
         projects = _discover_projects()
@@ -814,7 +837,7 @@ def create_app() -> FastAPI:
                     script = Script.load(script_path)
                 except Exception:
                     continue
-                for s in (script.scenes or []):
+                for s in script.scenes or []:
                     if s.image_path and Path(s.image_path).exists():
                         p_images += 1
                     if s.video_path and Path(s.video_path).exists():
@@ -824,19 +847,31 @@ def create_app() -> FastAPI:
             total_videos += p_videos
             total_episodes += len(p.get("episodes", []))
             if p_images or p_videos:
-                per_project.append({
-                    "project": pname,
-                    "episodes": len(p.get("episodes", [])),
-                    "images": p_images,
-                    "videos": p_videos,
-                    "est_cost": round(p_images * PRICE_PER_IMAGE + p_videos * PRICE_PER_VIDEO_CLIP + 0.002 * len(p.get("episodes", [])), 2),
-                })
+                est = (
+                    p_images * PRICE_PER_IMAGE
+                    + p_videos * PRICE_PER_VIDEO_CLIP
+                    + 0.002 * len(p.get("episodes", []))
+                )
+                per_project.append(
+                    {
+                        "project": pname,
+                        "episodes": len(p.get("episodes", [])),
+                        "images": p_images,
+                        "videos": p_videos,
+                        "est_cost": round(est, 2),
+                    }
+                )
 
+        est_tot = (
+            total_images * PRICE_PER_IMAGE
+            + total_videos * PRICE_PER_VIDEO_CLIP
+            + total_episodes * PRICE_PER_TEXT_CALL
+        )
         return {
             "total_images": total_images,
             "total_videos": total_videos,
             "total_episodes": total_episodes,
-            "est_total_cost": round(total_images * PRICE_PER_IMAGE + total_videos * PRICE_PER_VIDEO_CLIP + total_episodes * PRICE_PER_TEXT_CALL, 2),
+            "est_total_cost": round(est_tot, 2),
             "projects": per_project,
         }
 
@@ -850,15 +885,21 @@ def create_app() -> FastAPI:
             raise HTTPException(400, "text is required")
         text = text[:200]
         try:
-            import edge_tts
             import tempfile
+
+            import edge_tts
+
+            with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as tmp:
+                tmp_name = tmp.name
             communicate = edge_tts.Communicate(text, voice)
-            tmp = tempfile.NamedTemporaryFile(suffix=".mp3", delete=False)
-            await communicate.save(tmp.name)
-            return FileResponse(tmp.name, media_type="audio/mpeg",
-                               headers={"Content-Disposition": "inline"})
-        except ImportError:
-            raise HTTPException(503, "edge-tts not installed. Run: pip install edge-tts")
+            await communicate.save(tmp_name)
+            return FileResponse(
+                tmp_name,
+                media_type="audio/mpeg",
+                headers={"Content-Disposition": "inline"},
+            )
+        except ImportError as err:
+            raise HTTPException(503, "edge-tts not installed. Run: pip install edge-tts") from err
 
     # ── API: Serve scene images ─────────────────────────────────────
 
@@ -915,7 +956,15 @@ def create_app() -> FastAPI:
             raise HTTPException(422, "Invalid JSON body") from None
 
         changed = False
-        for field in ("narration", "visual_prompt", "duration_seconds", "camera", "style", "locked"):
+        fields = (
+            "narration",
+            "visual_prompt",
+            "duration_seconds",
+            "camera",
+            "style",
+            "locked",
+        )
+        for field in fields:
             if field in body:
                 setattr(scene, field, body[field])
                 changed = True
@@ -1050,7 +1099,7 @@ def create_app() -> FastAPI:
         try:
             project.reorder_episodes(new_order)
         except ValueError as e:
-            raise HTTPException(400, str(e))
+            raise HTTPException(400, str(e)) from e
         project.save()
         return {"status": "ok", "episode_numbers": [e.number for e in project.episodes]}
 
@@ -1131,7 +1180,9 @@ def create_app() -> FastAPI:
         return json.loads(snap.read_text())
 
     @app.get("/api/projects/{name}/episodes/{num}/diff")
-    def diff_script_versions(name: str, num: int, from_id: str = Query(...), to_id: str = Query(...)):
+    def diff_script_versions(
+        name: str, num: int, from_id: str = Query(...), to_id: str = Query(...)
+    ):
         """Return unified diff between two script snapshot versions."""
         root = _projects_dir() / name
         proj_file = root / "project.json"
@@ -1147,9 +1198,14 @@ def create_app() -> FastAPI:
         if not from_f.exists() or not to_f.exists():
             raise HTTPException(404, "Snapshot not found")
         import difflib
+
         from_lines = from_f.read_text().splitlines(keepends=True)
         to_lines = to_f.read_text().splitlines(keepends=True)
-        diff = list(difflib.unified_diff(from_lines, to_lines, fromfile=f"v{from_id}", tofile=f"v{to_id}", n=3))
+        diff = list(
+            difflib.unified_diff(
+                from_lines, to_lines, fromfile=f"v{from_id}", tofile=f"v{to_id}", n=3
+            )
+        )
         return {"diff": "".join(diff)}
 
     @app.post("/api/projects/{name}/episodes/{num}/scene/{scene_id}/rollback")
@@ -1183,7 +1239,15 @@ def create_app() -> FastAPI:
         if not current:
             raise HTTPException(404, f"Scene {scene_id} not found in current script")
 
-        for field in ("narration", "visual_prompt", "duration_seconds", "camera", "style", "dialogues"):
+        fields = (
+            "narration",
+            "visual_prompt",
+            "duration_seconds",
+            "camera",
+            "style",
+            "dialogues",
+        )
+        for field in fields:
             if field in snap_scene:
                 setattr(current, field, snap_scene[field])
 
@@ -1564,12 +1628,19 @@ def create_app() -> FastAPI:
                         key = (job.id, job.status)
                         if key not in seen:
                             seen.add(key)
-                            yield f"data: {json.dumps({'id': job.id, 'status': job.status, 'job_type': job.job_type, 'project': job.project})}\n\n"
+                            payload = {
+                                "id": job.id,
+                                "status": job.status,
+                                "job_type": job.job_type,
+                                "project": job.project,
+                            }
+                            yield f"data: {json.dumps(payload)}\n\n"
                     await asyncio.sleep(2)
             except asyncio.CancelledError:
                 pass
 
         from starlette.responses import StreamingResponse
+
         return StreamingResponse(event_stream(), media_type="text/event-stream")
 
     # ── SPA catch-all ───────────────────────────────────────────────

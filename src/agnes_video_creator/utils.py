@@ -185,9 +185,7 @@ def translate_prompt(prompt: str, cfg: AgnesConfig, target_lang: str | None = No
     try:
         translated = data["choices"][0]["message"]["content"].strip()
     except (KeyError, IndexError, TypeError) as exc:
-        raise SystemExit(
-            f"Translation failed: {json.dumps(data, ensure_ascii=False)}"
-        ) from exc
+        raise SystemExit(f"Translation failed: {json.dumps(data, ensure_ascii=False)}") from exc
     if not translated:
         raise SystemExit("Translation failed: empty response")
     return translated

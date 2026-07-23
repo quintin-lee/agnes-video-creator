@@ -182,6 +182,7 @@ def assemble_video(
     if cfg.sfx_dir:
         if cfg.auto_sfx:
             from agnes_video_creator.sfx_matcher import auto_fill_sfx
+
             auto_fill_sfx(script, cfg, verbose=verbose)
         final_path = _add_sfx(final_path, script, temp_dir, cfg, verbose)
 
@@ -205,8 +206,13 @@ def assemble_video(
             verbose=verbose,
         )
 
-    # ── Step 4c: Post-processing (super-res / interpolation / stabilisation / colour) ──
-    if cfg.post_super_res > 1 or cfg.post_interpolate > 0 or cfg.post_stabilize or cfg.post_color_grade:
+    has_post = (
+        cfg.post_super_res > 1
+        or cfg.post_interpolate > 0
+        or cfg.post_stabilize
+        or cfg.post_color_grade
+    )
+    if has_post:
         final_path = _post_process_video(final_path, temp_dir, cfg, verbose)
 
     # ── Step 5: Copy to final output ────────────────────────────
@@ -386,9 +392,15 @@ def _post_process_video(video_path: Path, temp_dir: Path, cfg: AgnesConfig, verb
         detect_log = temp_dir / "transforms.trf"
         _run_ffmpeg(
             [
-                "ffmpeg", "-y", "-i", str(current),
-                "-vf", "vidstabdetect=shakiness=5:accuracy=15:result=" + str(detect_log),
-                "-f", "null", "-",
+                "ffmpeg",
+                "-y",
+                "-i",
+                str(current),
+                "-vf",
+                "vidstabdetect=shakiness=5:accuracy=15:result=" + str(detect_log),
+                "-f",
+                "null",
+                "-",
             ],
             "stabilise: detect",
             verbose,
@@ -396,9 +408,16 @@ def _post_process_video(video_path: Path, temp_dir: Path, cfg: AgnesConfig, verb
         stable = temp_dir / "post_stable.mp4"
         _run_ffmpeg(
             [
-                "ffmpeg", "-y", "-i", str(current),
-                "-vf", f"vidstabtransform=input={detect_log}:zoom=1:smoothing=10",
-                "-c:a", "aac", "-b:a", "128k",
+                "ffmpeg",
+                "-y",
+                "-i",
+                str(current),
+                "-vf",
+                f"vidstabtransform=input={detect_log}:zoom=1:smoothing=10",
+                "-c:a",
+                "aac",
+                "-b:a",
+                "128k",
                 str(stable),
             ],
             "stabilise: transform",
@@ -415,7 +434,9 @@ def _post_process_video(video_path: Path, temp_dir: Path, cfg: AgnesConfig, verb
         filters.append(f"scale={w}:{h}:flags=lanczos")
 
     if cfg.post_interpolate > 0:
-        filters.append(f"minterpolate=fps={cfg.post_interpolate}:mi_mode=mci:mc_mode=aobmc:me_mode=bidir")
+        filters.append(
+            f"minterpolate=fps={cfg.post_interpolate}:mi_mode=mci:mc_mode=aobmc:me_mode=bidir"
+        )
 
     if cfg.post_color_grade:
         filters.append(cfg.post_color_grade)
@@ -424,19 +445,35 @@ def _post_process_video(video_path: Path, temp_dir: Path, cfg: AgnesConfig, verb
         vf = ",".join(filters)
         _run_ffmpeg(
             [
-                "ffmpeg", "-y", "-i", str(current),
-                "-vf", vf,
-                "-c:a", "aac", "-b:a", "128k",
-                "-c:v", "libx264", "-preset", "fast", "-crf", "18",
-                "-pix_fmt", "yuv420p",
+                "ffmpeg",
+                "-y",
+                "-i",
+                str(current),
+                "-vf",
+                vf,
+                "-c:a",
+                "aac",
+                "-b:a",
+                "128k",
+                "-c:v",
+                "libx264",
+                "-preset",
+                "fast",
+                "-crf",
+                "18",
+                "-pix_fmt",
+                "yuv420p",
                 str(output_vs),
             ],
-            "post-process: " + ", ".join(
-                p for p, enabled in [
+            "post-process: "
+            + ", ".join(
+                p
+                for p, enabled in [
                     ("super-res", cfg.post_super_res > 1),
                     ("interpolate", cfg.post_interpolate > 0),
                     ("color", bool(cfg.post_color_grade)),
-                ] if enabled
+                ]
+                if enabled
             ),
             verbose,
         )
@@ -1058,8 +1095,13 @@ def _save_sidecar_srt(manifest_data: list[dict], temp_dir: Path) -> Path | None:
     return srt_path
 
 
-def _translate_subtitle_file(srt_path: Path, lang: str, cfg: "AgnesConfig", verbose: bool) -> Path | None:
-    """Translate a subtitle file to *lang* and save alongside. Returns the translated path or None."""
+def _translate_subtitle_file(
+    srt_path: Path, lang: str, cfg: AgnesConfig, verbose: bool
+) -> Path | None:
+    """Translate a subtitle file to *lang* and save alongside.
+
+    Returns the translated path or None.
+    """
     if not srt_path.exists():
         return None
     from .utils import translate_prompt
@@ -1487,14 +1529,16 @@ def _embed_chapters(
         dur_ms = int((scene.duration_seconds or 5.0) * 1000)
         end_ms = cursor_ms + dur_ms
         label = scene.narration[:60] if scene.narration else f"Scene {scene.id}"
-        meta_lines.extend([
-            "[CHAPTER]",
-            "TIMEBASE=1/1000",
-            f"START={cursor_ms}",
-            f"END={end_ms}",
-            f"title={label}",
-            "",
-        ])
+        meta_lines.extend(
+            [
+                "[CHAPTER]",
+                "TIMEBASE=1/1000",
+                f"START={cursor_ms}",
+                f"END={end_ms}",
+                f"title={label}",
+                "",
+            ]
+        )
         cursor_ms = end_ms
 
     meta_path.write_text("\n".join(meta_lines), encoding="utf-8")
@@ -1556,12 +1600,18 @@ def _add_watermark(
     vf += f"[0:v][logo]overlay={xy}:format=auto,format=yuv420p"
 
     cmd = [
-        "ffmpeg", "-y",
-        "-i", str(video_path),
-        "-i", str(logo),
-        "-filter_complex", vf,
-        "-c:a", "copy",
-        "-movflags", "+faststart",
+        "ffmpeg",
+        "-y",
+        "-i",
+        str(video_path),
+        "-i",
+        str(logo),
+        "-filter_complex",
+        vf,
+        "-c:a",
+        "copy",
+        "-movflags",
+        "+faststart",
         str(output),
     ]
     _run_ffmpeg(cmd, "add watermark overlay", verbose)
@@ -1599,9 +1649,7 @@ def _add_sfx(
             for ext in (".mp3", ".wav", ".m4a", ".aac", ".ogg"):
                 sfx_file = sfx_dir / f"{name}{ext}"
                 if sfx_file.exists():
-                    sfx_inputs.append(
-                        {"path": str(sfx_file), "timestamp_ms": int(cursor * 1000)}
-                    )
+                    sfx_inputs.append({"path": str(sfx_file), "timestamp_ms": int(cursor * 1000)})
                     break
         cursor += dur
 
@@ -1616,10 +1664,7 @@ def _add_sfx(
     for i, sfx in enumerate(sfx_inputs):
         idx = i + 1  # input index (0 = video)
         delay_ms = sfx["timestamp_ms"]
-        filter_parts.append(
-            f"[{idx}:a]adelay={delay_ms}|{delay_ms},"
-            f"volume=1.0[sfx{i}]"
-        )
+        filter_parts.append(f"[{idx}:a]adelay={delay_ms}|{delay_ms},volume=1.0[sfx{i}]")
 
     # Mix original audio with all SFX tracks
     mix_inputs = "[0:a]" + "".join(f"[sfx{i}]" for i in range(n_sfx))
