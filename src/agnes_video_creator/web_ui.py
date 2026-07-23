@@ -790,6 +790,56 @@ def create_app() -> FastAPI:
         filtered = items
         return {"assets": filtered, "total": len(filtered)}
 
+    # ── API: Usage dashboard ─────────────────────────────────────────
+
+    @app.get("/api/usage")
+    def usage_report():
+        """Aggregate actual API usage across all projects."""
+        from agnes_video_creator.cost_estimator import PRICE_PER_IMAGE, PRICE_PER_VIDEO_CLIP, PRICE_PER_TEXT_CALL
+
+        root = _projects_dir()
+        projects = _discover_projects()
+        per_project = []
+        total_images = total_videos = total_episodes = 0
+
+        for p in projects:
+            pname = p["name"]
+            p_images = p_videos = 0
+            for ep in p.get("episodes", []):
+                ep_num = ep["number"]
+                script_path = root / pname / f"episodes/{ep_num}/script.json"
+                if not script_path.exists():
+                    continue
+                try:
+                    script = Script.load(script_path)
+                except Exception:
+                    continue
+                for s in (script.scenes or []):
+                    if s.image_path and Path(s.image_path).exists():
+                        p_images += 1
+                    if s.video_path and Path(s.video_path).exists():
+                        p_videos += 1
+
+            total_images += p_images
+            total_videos += p_videos
+            total_episodes += len(p.get("episodes", []))
+            if p_images or p_videos:
+                per_project.append({
+                    "project": pname,
+                    "episodes": len(p.get("episodes", [])),
+                    "images": p_images,
+                    "videos": p_videos,
+                    "est_cost": round(p_images * PRICE_PER_IMAGE + p_videos * PRICE_PER_VIDEO_CLIP + 0.002 * len(p.get("episodes", [])), 2),
+                })
+
+        return {
+            "total_images": total_images,
+            "total_videos": total_videos,
+            "total_episodes": total_episodes,
+            "est_total_cost": round(total_images * PRICE_PER_IMAGE + total_videos * PRICE_PER_VIDEO_CLIP + total_episodes * PRICE_PER_TEXT_CALL, 2),
+            "projects": per_project,
+        }
+
     # ── API: Serve scene images ─────────────────────────────────────
 
     @app.get("/api/projects/{name}/images/{episode_num:path}")

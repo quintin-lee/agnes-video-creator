@@ -158,6 +158,7 @@ a:hover{text-decoration:underline}
   <span class="spacer"></span>
   <a href="#/batch" style="font-size:.85em;color:var(--text2);margin-right:12px">Batch</a>
   <a href="#/assets" style="font-size:.85em;color:var(--text2);margin-right:12px">Assets</a>
+  <a href="#/usage" style="font-size:.85em;color:var(--text2);margin-right:12px">Usage</a>
   <span class="dot on" title="Connected"></span>
 </nav>
 <div id="key-banner" class="hidden" style="background:var(--red);color:#fff;text-align:center;padding:6px 16px;font-size:.85em">
@@ -183,6 +184,7 @@ const App = {
     if(h==="/")return this.renderDashboard();
     if(h==="/batch")return this.renderBatch();
     if(h==="/assets")return this.renderAssets();
+    if(h==="/usage")return this.renderUsage();
     let m=h.match(/^\/projects\/([^/]+)$/);
     if(m)return this.renderProject(decodeURIComponent(m[1]));
     m=h.match(/^\/projects\/([^/]+)\/episodes\/(\d+)$/);
@@ -338,6 +340,46 @@ const App = {
         <button class="btn btn-small btn-primary" onclick="App.renderAssets()" style="font-size:.85em">Apply</button>
       </div></div>
       <div class="project-grid">${grid}</div>`;
+  },
+
+  async renderUsage(){
+    this._stopPoll();
+    const el=this.$("#app");el.innerHTML=`<div class="pulse text-muted" style="text-align:center;padding:60px">Loading...</div>`;
+    let data;
+    try{data=await this.api("/api/usage")}
+    catch(e){el.innerHTML=`<div class="empty-state"><p style="color:var(--red)">${e.message}</p></div>`;return}
+    const pp=data.projects||[];
+    const rows=pp.map(p=>`<tr>
+      <td><strong>${this.esc(p.project)}</strong></td>
+      <td>${p.episodes}</td>
+      <td>${p.images}</td>
+      <td>${p.videos}</td>
+      <td>$${p.est_cost.toFixed(2)}</td>
+    </tr>`).join("")||'<tr><td colspan="5" style="text-align:center;color:var(--text3)">No projects with data.</td></tr>';
+    el.innerHTML=`<div class="page-title">Usage Dashboard</div>
+      <div class="text-sm text-muted page-sub">Aggregated API usage across all projects</div>
+      <div style="display:flex;gap:20px;margin-bottom:16px;flex-wrap:wrap">
+        <div class="card" style="flex:1;min-width:140px;text-align:center;padding:18px">
+          <div style="font-size:2em;font-weight:700;color:var(--accent)">${data.total_images}</div>
+          <div class="text-sm text-muted">Images Generated</div>
+        </div>
+        <div class="card" style="flex:1;min-width:140px;text-align:center;padding:18px">
+          <div style="font-size:2em;font-weight:700;color:var(--blue)">${data.total_videos}</div>
+          <div class="text-sm text-muted">Videos Generated</div>
+        </div>
+        <div class="card" style="flex:1;min-width:140px;text-align:center;padding:18px">
+          <div style="font-size:2em;font-weight:700;color:var(--yellow)">${data.total_episodes}</div>
+          <div class="text-sm text-muted">Episodes</div>
+        </div>
+        <div class="card" style="flex:1;min-width:140px;text-align:center;padding:18px">
+          <div style="font-size:2em;font-weight:700;color:var(--purple)">$${data.est_total_cost.toFixed(2)}</div>
+          <div class="text-sm text-muted">Est. Total Cost</div>
+        </div>
+      </div>
+      <div class="card"><table class="ep-table" style="width:100%">
+        <thead><tr><th>Project</th><th>Episodes</th><th>Images</th><th>Videos</th><th>Est. Cost</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table></div>`;
   },
 
   _connectBatchSSE(){
