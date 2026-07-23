@@ -952,7 +952,11 @@ const App = {
             <span id="scene-count" class="text-sm text-muted" style="align-self:center"></span>
           </div>
           ${timelineBar}<div class="scene-grid" id="scene-grid">${sceneCards}</div></div>
-        ${data.output_path?`<div class="card"><h2>Output</h2><div class="text-sm"><a href="/${data.output_path}" target="_blank">${this.esc(data.output_path)}</a></div></div>`:""}
+        ${data.output_path?`<div class="card"><h2>Output</h2>
+          <video controls preload="metadata" style="width:100%;border-radius:6px;background:#000"
+            src="/api/projects/${encodeURIComponent(name)}/episodes/${ep}/video">
+          </video>
+          <div class="text-xs text-muted" style="margin-top:4px"><a href="/api/projects/${encodeURIComponent(name)}/episodes/${ep}/video" target="_blank" download>Download</a></div></div>`:""}
       </div>      <div class="side">
         <div class="card"><h2>Controls</h2><div class="controls">
           <button class="btn btn-primary ${rl}" id="btn-render-ep${ep}" onclick="App.runRenderEpisode('${this.esc(name)}',${ep})" ${data.is_running?"disabled":""}>Render Episode</button>

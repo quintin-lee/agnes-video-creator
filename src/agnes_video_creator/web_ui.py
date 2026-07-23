@@ -690,6 +690,23 @@ def create_app() -> FastAPI:
             else None,
         }
 
+    # ── API: Episode video serving ───────────────────────────────────
+
+    @app.get("/api/projects/{name}/episodes/{num}/video")
+    def get_episode_video(name: str, num: int):
+        """Serve the assembled episode video."""
+        root = _projects_dir() / name
+        proj_file = root / "project.json"
+        if not proj_file.exists():
+            raise HTTPException(404, f"Project '{name}' not found")
+
+        project = Project.load(proj_file)
+        ep_info = next((e for e in project.episodes if e.number == num), None)
+        if not ep_info or not ep_info.output_path or not Path(ep_info.output_path).exists():
+            raise HTTPException(404, f"Episode {num} output video not found")
+
+        return FileResponse(ep_info.output_path, media_type="video/mp4")
+
     # ── API: Storyboard HTML ────────────────────────────────────────
 
     @app.get("/api/projects/{name}/storyboard/{num}")
