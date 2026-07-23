@@ -840,6 +840,26 @@ def create_app() -> FastAPI:
             "projects": per_project,
         }
 
+    @app.post("/api/tts/preview")
+    async def tts_preview(request: Request):
+        """Generate a short TTS preview for a voice + text snippet."""
+        body = await request.json()
+        voice = body.get("voice", "zh-CN-XiaoxiaoNeural")
+        text = body.get("text", "")
+        if not text:
+            raise HTTPException(400, "text is required")
+        text = text[:200]
+        try:
+            import edge_tts
+            import tempfile
+            communicate = edge_tts.Communicate(text, voice)
+            tmp = tempfile.NamedTemporaryFile(suffix=".mp3", delete=False)
+            await communicate.save(tmp.name)
+            return FileResponse(tmp.name, media_type="audio/mpeg",
+                               headers={"Content-Disposition": "inline"})
+        except ImportError:
+            raise HTTPException(503, "edge-tts not installed. Run: pip install edge-tts")
+
     # ── API: Serve scene images ─────────────────────────────────────
 
     @app.get("/api/projects/{name}/images/{episode_num:path}")

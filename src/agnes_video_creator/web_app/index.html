@@ -567,7 +567,9 @@ const App = {
           <label class="text-xs text-muted">Age</label>
           <input class="cs-${_n}-age" type="text" value="${this.esc(c.age||"")}" style="width:100%;background:var(--surface3);border:1px solid var(--border);color:var(--text);border-radius:3px;padding:2px 6px;font-size:.85em">
           <label class="text-xs text-muted">Voice (TTS)</label>
-          <input class="cs-${_n}-voice" type="text" value="${this.esc(c.voice||"")}" placeholder="zh-CN-XiaoxiaoNeural" style="width:100%;background:var(--surface3);border:1px solid var(--border);color:var(--text);border-radius:3px;padding:2px 6px;font-size:.85em">
+          <label class="text-xs text-muted">Voice (TTS)</label>
+          <div style="display:flex;gap:4px"><input class="cs-${_n}-voice" type="text" value="${this.esc(c.voice||"")}" placeholder="zh-CN-XiaoxiaoNeural" style="flex:1;background:var(--surface3);border:1px solid var(--border);color:var(--text);border-radius:3px;padding:2px 6px;font-size:.85em">
+          <button class="btn btn-small btn-outline" onclick="App.ttsPreview(this.previousElementSibling)" style="font-size:.75em;white-space:nowrap">Preview</button></div>
           <label class="text-xs text-muted">Personality</label>
           <textarea class="cs-${_n}-personality" rows="2" style="width:100%;background:var(--surface3);border:1px solid var(--border);color:var(--text);border-radius:3px;padding:2px 6px;font-size:.85em;resize:vertical">${this.esc(c.personality||"")}</textarea>
           <label class="text-xs text-muted">Appearance</label>
@@ -735,6 +737,22 @@ const App = {
       const fb=el.querySelector(".save-feedback");
       if(fb){fb.textContent="\u2713 Trimmed";fb.style.color="var(--accent)";setTimeout(()=>fb.textContent="",2000)}
     }catch(e){alert("Trim failed: "+e.message)}
+  },
+
+  async ttsPreview(inputEl){
+    const voice=inputEl?.value?.trim()||"zh-CN-XiaoxiaoNeural";
+    const text=prompt("Enter text for TTS preview:","Hello, this is a voice preview.");
+    if(!text)return;
+    try{
+      const r=await fetch("/api/tts/preview",{method:"POST",headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({voice,text:text.slice(0,200)})});
+      if(!r.ok){const e=await r.json();alert(e.detail||"TTS failed");return}
+      const blob=await r.blob();
+      const url=URL.createObjectURL(blob);
+      const a=new Audio(url);
+      a.onended=()=>URL.revokeObjectURL(url);
+      a.play().catch(()=>alert("Playback failed"));
+    }catch(e){alert("TTS error: "+e.message)}
   },
 
   async saveCharacterSheets(name){
