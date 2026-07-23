@@ -142,7 +142,9 @@ class TestPreparePrompt:
 
     def test_translate_enabled_with_unicode(self) -> None:
         cfg_ = AgnesConfig(translate_prompts=True)
-        result, original = prepare_prompt("你好世界", cfg_)
+        with patch("agnes_video_creator.utils.request_json") as mock_req:
+            mock_req.return_value = {"choices": [{"message": {"content": "hello world"}}]}
+            result, original = prepare_prompt("你好世界", cfg_)
         assert isinstance(result, str)
         # Should attempt translation
         assert isinstance(original, str) or original is None
@@ -154,7 +156,9 @@ class TestPreparePrompt:
 
     def test_mixed_content(self) -> None:
         cfg_ = AgnesConfig(translate_prompts=True)
-        result, original = prepare_prompt("hello 你好", cfg_)
+        with patch("agnes_video_creator.utils.request_json") as mock_req:
+            mock_req.return_value = {"choices": [{"message": {"content": "hello hello"}}]}
+            result, original = prepare_prompt("hello 你好", cfg_)
         assert isinstance(result, str)
 
 

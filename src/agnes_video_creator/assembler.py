@@ -121,7 +121,7 @@ def assemble_video(
                 f"file '{title_path.resolve()}'\nfile '{final_path.resolve()}'\n"
             )
             concat_output = temp_dir / "with_title.mp4"
-            subprocess.run(
+            _run_ffmpeg(
                 [
                     "ffmpeg",
                     "-y",
@@ -135,8 +135,8 @@ def assemble_video(
                     "copy",
                     str(concat_output),
                 ],
-                capture_output=True,
-                check=False,
+                "attach title card",
+                verbose,
             )
             if concat_output.exists():
                 final_path = concat_output
@@ -150,7 +150,7 @@ def assemble_video(
                 f"file '{final_path.resolve()}'\nfile '{credits_path.resolve()}'\n"
             )
             concat_output = temp_dir / "with_credits.mp4"
-            subprocess.run(
+            _run_ffmpeg(
                 [
                     "ffmpeg",
                     "-y",
@@ -164,8 +164,8 @@ def assemble_video(
                     "copy",
                     str(concat_output),
                 ],
-                capture_output=True,
-                check=False,
+                "attach end credits",
+                verbose,
             )
             if concat_output.exists():
                 final_path = concat_output
