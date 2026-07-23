@@ -1133,6 +1133,47 @@ def create_app() -> FastAPI:
         diff = list(difflib.unified_diff(from_lines, to_lines, fromfile=f"v{from_id}", tofile=f"v{to_id}", n=3))
         return {"diff": "".join(diff)}
 
+    @app.post("/api/projects/{name}/episodes/{num}/scene/{scene_id}/rollback")
+    async def rollback_scene(name: str, num: int, scene_id: int, request: Request):
+        """Rollback a single scene to a previous snapshot version."""
+        root = _projects_dir() / name
+        proj_file = root / "project.json"
+        if not proj_file.exists():
+            raise HTTPException(404, "Project not found")
+        project = Project.load(proj_file)
+        ep_info = next((e for e in project.episodes if e.number == num), None)
+        if not ep_info or not ep_info.script_path or not Path(ep_info.script_path).exists():
+            raise HTTPException(404, "Episode script not found")
+
+        body = await request.json()
+        version_id = body.get("version_id", "")
+        if not version_id:
+            raise HTTPException(400, "version_id required")
+
+        snap_path = Path(ep_info.script_path).parent / "snapshots" / f"script-{version_id}.json"
+        if not snap_path.exists():
+            raise HTTPException(404, "Snapshot not found")
+
+        snap_data = json.loads(snap_path.read_text())
+        snap_scene = next((s for s in snap_data.get("scenes", []) if s.get("id") == scene_id), None)
+        if not snap_scene:
+            raise HTTPException(404, f"Scene {scene_id} not found in snapshot")
+
+        script = Script.load(ep_info.script_path)
+        current = next((s for s in script.scenes if s.id == scene_id), None)
+        if not current:
+            raise HTTPException(404, f"Scene {scene_id} not found in current script")
+
+        for field in ("narration", "visual_prompt", "duration_seconds", "camera", "style", "dialogues"):
+            if field in snap_scene:
+                setattr(current, field, snap_scene[field])
+
+        _snapshot_script(Path(ep_info.script_path))
+        script.save()
+        project.mark_updated()
+        project.save()
+        return {"status": "ok", "scene_id": scene_id, "version_id": version_id}
+
     # ── API: Voice-map assignment ───────────────────────────────────
 
     @app.put("/api/projects/{name}/voice-map")

@@ -901,6 +901,7 @@ const App = {
         <div style="display:flex;gap:4px">
           <button class="btn btn-small btn-outline" onclick="App.showScriptSnapshot('${this.esc(name)}',${ep},'${v.id}')" style="font-size:.75em">View</button>
           <button class="btn btn-small btn-outline" onclick="App.showScriptDiff('${this.esc(name)}',${ep},'${v.id}')" style="font-size:.75em">Diff</button>
+          <button class="btn btn-small btn-outline" onclick="App.rollbackScene('${this.esc(name)}',${ep},'${v.id}')" style="font-size:.75em;color:var(--yellow)">Rollback</button>
         </div></div>`;
     }).join("");
     const o=document.createElement("div");o.className="modal-overlay";
@@ -940,6 +941,21 @@ const App = {
       <button class="btn btn-outline" onclick="this.closest('.modal-overlay').remove()" style="font-size:.85em">Close</button></div>
       <pre style="margin-top:8px;background:var(--surface3);border:1px solid var(--border);border-radius:6px;padding:8px;font-size:.7em;max-height:65vh;overflow:auto;font-family:var(--mono);white-space:pre-wrap">${this.esc(diffText)}</pre></div>`;
     document.body.appendChild(o);
+  },
+
+  async rollbackScene(name,ep,versionId){
+    const sid=prompt("Enter the scene ID to rollback to this version:");
+    if(!sid||!sid.trim())return;
+    const sceneId=parseInt(sid);
+    if(isNaN(sceneId)){alert("Invalid scene ID");return}
+    if(!confirm("Rollback Scene "+sceneId+" to version "+versionId+"?"))return;
+    try{
+      await this.api("/api/projects/"+encodeURIComponent(name)+"/episodes/"+ep+"/scene/"+sceneId+"/rollback",
+        {method:"POST",body:JSON.stringify({version_id:versionId})});
+      document.querySelector(".modal-overlay")?.remove();
+      alert("Scene "+sceneId+" rolled back to version "+versionId+".");
+      this.renderEpisode(name,ep);
+    }catch(e){alert("Rollback failed: "+e.message)}
   },
 
   _attachLog(name){
