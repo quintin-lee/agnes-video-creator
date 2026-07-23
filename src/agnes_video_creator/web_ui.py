@@ -1287,6 +1287,15 @@ def create_app() -> FastAPI:
         ok = q.cancel(job_id)
         return {"cancelled": ok}
 
+    @app.post("/api/batch/retry/{job_id}")
+    def batch_retry(job_id: str):
+        """Re-submit a failed/cancelled job."""
+        q = get_queue()
+        job = q.retry(job_id)
+        if not job:
+            raise HTTPException(400, f"Job '{job_id}' is not in a retryable state")
+        return {"job": job.to_dict()}
+
     @app.get("/api/batch/events")
     async def batch_events(request: Request):
         """Stream batch job status changes via SSE."""

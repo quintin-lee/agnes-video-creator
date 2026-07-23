@@ -195,6 +195,33 @@ class BatchQueue:
             conn.commit()
             return cur.rowcount > 0
 
+    def retry(self, job_id: str) -> BatchJob | None:
+        """Re-submit a failed/cancelled job. Returns the new job or None."""
+        with self._lock:
+            conn = self._conn()
+            row = conn.execute(
+                "SELECT * FROM jobs WHERE id = ? AND status IN ('failed', 'cancelled')",
+                (job_id,),
+            ).fetchone()
+            if row is None:
+                return None
+            new_job = BatchJob(
+                id=str(uuid.uuid4())[:12],
+                job_type=row["job_type"],
+                project=row["project"],
+                episode_num=row["episode_num"],
+                status="pending",
+                created_at=_now(),
+            )
+            conn.execute(
+                """INSERT INTO jobs (id, job_type, project, status, episode_num, created_at)
+                   VALUES (?, ?, ?, ?, ?, ?)""",
+                (new_job.id, new_job.job_type, new_job.project, new_job.status,
+                 new_job.episode_num, new_job.created_at),
+            )
+            conn.commit()
+        return new_job
+
     def list_jobs(
         self,
         *,

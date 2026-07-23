@@ -249,7 +249,7 @@ const App = {
         <td>${this.esc(j.job_type)}${ep}${err}</td>
         <td>${this.esc(j.project||"—")}</td>
         <td class="text-muted text-sm">${(j.created_at||"").slice(0,19)}</td>
-        <td onclick="event.stopPropagation()">${j.status==="pending"||j.status==="running"?`<button class="btn btn-small btn-danger" onclick="App.cancelBatchJob('${this.esc(j.id)}')">Cancel</button>`:""}</td>
+        <td onclick="event.stopPropagation()">${j.status==="pending"||j.status==="running"?`<button class="btn btn-small btn-danger" onclick="App.cancelBatchJob('${this.esc(j.id)}')">Cancel</button>`:j.status==="failed"||j.status==="cancelled"?`<button class="btn btn-small btn-outline" onclick="App.retryBatchJob('${this.esc(j.id)}')">Retry</button>`:""}</td>
       </tr>`;
     }).join("")||'<tr><td colspan="6" style="text-align:center;color:var(--text3);padding:20px">No jobs.</td></tr>';
 
@@ -332,10 +332,17 @@ const App = {
 
   async cancelBatchJob(jobId){
     try{
-      const r=this.api("/api/batch/cancel/"+encodeURIComponent(jobId),{method:"POST"});
+      const r=await this.api("/api/batch/cancel/"+encodeURIComponent(jobId),{method:"POST"});
       if(r.cancelled)this.renderBatch();
       else alert("Could not cancel — job may already be done.");
     }catch(e){alert("Cancel failed: "+e.message)}
+  },
+
+  async retryBatchJob(jobId){
+    try{
+      const r=await this.api("/api/batch/retry/"+encodeURIComponent(jobId),{method:"POST"});
+      if(r.job)this.renderBatch();
+    }catch(e){alert("Retry failed: "+e.message)}
   },
 
   showNewProject(){
