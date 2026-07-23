@@ -171,8 +171,10 @@ tr[draggable].drag-over{outline:2px solid var(--accent);outline-offset:-2px}
 <script>
 const App = {
   _poller: null,
+  __autoSaveTimers: {},
   async init(){
     window.addEventListener("hashchange",()=>this.route());
+    this._initKeyboard();
     try{
       const s=await this.api("/api/status");
       const b=document.getElementById("key-banner");
@@ -202,6 +204,35 @@ const App = {
     const res=await fetch(path,{headers:{"Content-Type":"application/json"},...opts});
     if(!res.ok){const t=await res.text().catch(()=>"");throw Error(res.status+" "+res.statusText+(t?": "+t:""))}
     return opts._raw?res:res.json();
+  },
+
+  _initKeyboard(){
+    document.addEventListener("keydown",e=>{
+      if((e.ctrlKey||e.metaKey)&&e.key==="s"){
+        e.preventDefault();
+        const saveBtn=document.getElementById("sed-save-btn")||document.querySelector("#scene-grid .btn-primary");
+        if(saveBtn){saveBtn.click();return}
+        // Fallback: trigger all visible Save buttons in scene grid
+        document.querySelectorAll("#scene-grid .btn-primary").forEach(b=>b.click());
+      }
+    });
+  },
+
+  _autoSaveScene(name,ep,sceneId,delay=800){
+    const key=name+":"+ep+":"+sceneId;
+    if(this.__autoSaveTimers[key])clearTimeout(this.__autoSaveTimers[key]);
+    this.__autoSaveTimers[key]=setTimeout(()=>{
+      delete this.__autoSaveTimers[key];
+      const card=document.getElementById("scene-edit-"+sceneId);
+      if(!card)return;
+      const narration=card.querySelector(".edit-narration")?.value??"";
+      const visualPrompt=card.querySelector(".edit-prompt")?.value??"";
+      const dur=parseFloat(card.querySelector(".edit-duration")?.value)||5;
+      this.api("/api/projects/"+encodeURIComponent(name)+"/episodes/"+ep+"/scene/"+sceneId,
+        {method:"PUT",body:JSON.stringify({narration,visual_prompt,duration_seconds:dur})}).catch(()=>{});
+      const fb=card.querySelector(".save-feedback");
+      if(fb){fb.textContent="\u2713 auto-saved";fb.style.color="var(--text3)";setTimeout(()=>fb.textContent="",1500)}
+    },delay);
   },
 
   sc(s){return s==="assembled"?"assembled":s==="script_ready"?"script_ready":s==="images_ready"?"images_ready":s==="videos_ready"?"videos_ready":"pending"},
@@ -1090,9 +1121,9 @@ const App = {
         :`<div class="ph">(no image)</div>`
       }</div><div class="body">
         <div class="num">Scene ${s.id}</div>
-        <div class="meta"><span class="badge"><input class="edit-duration" type="number" step="0.5" min="1" max="60" value="${s.duration_seconds.toFixed(1)}" style="width:50px;background:var(--surface3);border:1px solid var(--border);color:var(--text);border-radius:3px;padding:1px 4px;font-size:.85em">s</span><span class="badge cam">${this.esc(s.camera||"static")}</span><span class="badge">${this.esc(s.style||"")}</span></div>
-        <div class="narr"><textarea class="edit-narration" rows="2" style="width:100%;background:var(--surface3);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:4px;font-size:.85em;font-family:var(--font);resize:vertical">${this.esc(s.narration||"")}</textarea></div>
-        <div style="margin-top:4px"><textarea class="edit-prompt" rows="2" style="width:100%;background:var(--surface3);border:1px solid var(--border);color:var(--text2);border-radius:4px;padding:4px;font-size:.8em;font-family:var(--mono);resize:vertical">${this.esc(s.visual_prompt||"")}</textarea></div>
+        <div class="meta"><span class="badge"><input class="edit-duration" type="number" step="0.5" min="1" max="60" value="${s.duration_seconds.toFixed(1)}" oninput="App._autoSaveScene('${this.esc(name)}',${ep},${s.id},1200)" style="width:50px;background:var(--surface3);border:1px solid var(--border);color:var(--text);border-radius:3px;padding:1px 4px;font-size:.85em">s</span><span class="badge cam">${this.esc(s.camera||"static")}</span><span class="badge">${this.esc(s.style||"")}</span></div>
+        <div class="narr"><textarea class="edit-narration" rows="2" oninput="App._autoSaveScene('${this.esc(name)}',${ep},${s.id})" style="width:100%;background:var(--surface3);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:4px;font-size:.85em;font-family:var(--font);resize:vertical">${this.esc(s.narration||"")}</textarea></div>
+        <div style="margin-top:4px"><textarea class="edit-prompt" rows="2" oninput="App._autoSaveScene('${this.esc(name)}',${ep},${s.id})" style="width:100%;background:var(--surface3);border:1px solid var(--border);color:var(--text2);border-radius:4px;padding:4px;font-size:.8em;font-family:var(--mono);resize:vertical">${this.esc(s.visual_prompt||"")}</textarea></div>
         ${dials}${tags?`<div class="tags">${tags}</div>`:""}
         <div class="si" style="display:flex;align-items:center;flex-wrap:wrap;gap:4px;margin-top:6px">
           <span><span class="d ${s.is_image_ready?"ok":"no"}"></span>img <span class="d ${s.is_video_ready?"ok":"no"}"></span>vid${s.is_video_ready?` <button class="btn btn-small btn-outline" onclick="App.regenSceneVideo('${this.esc(name)}',${ep},${s.id})" style="font-size:.7em;padding:1px 4px" title="Regenerate video for this scene">regen</button>`:""}</span>
