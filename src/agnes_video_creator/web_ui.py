@@ -915,6 +915,53 @@ def create_app() -> FastAPI:
 
         return {"status": "ok", "scene_id": scene_id}
 
+    @app.post("/api/projects/{name}/episodes/{num}/batch/scene")
+    async def batch_scene_action(name: str, num: int, request: Request):
+        """Batch action on multiple scenes: lock, unlock, regen_images, regen_videos, delete."""
+        root = _projects_dir() / name
+        proj_file = root / "project.json"
+        if not proj_file.exists():
+            raise HTTPException(404, f"Project '{name}' not found")
+
+        project = Project.load(proj_file)
+        ep_info = next((e for e in project.episodes if e.number == num), None)
+        if not ep_info or not ep_info.script_path or not Path(ep_info.script_path).exists():
+            raise HTTPException(404, f"Episode {num} script not found")
+
+        body = await request.json()
+        action = body.get("action", "")
+        scene_ids = body.get("scene_ids", [])
+        if not action or not scene_ids:
+            raise HTTPException(400, "action and scene_ids required")
+
+        script = Script.load(ep_info.script_path)
+        targets = [s for s in script.scenes if s.id in scene_ids]
+        if not targets:
+            raise HTTPException(404, "No matching scenes found")
+
+        if action == "lock":
+            for s in targets:
+                s.locked = True
+        elif action == "unlock":
+            for s in targets:
+                s.locked = False
+        elif action == "regen_images":
+            for s in targets:
+                s.is_image_ready = False
+        elif action == "regen_videos":
+            for s in targets:
+                s.is_video_ready = False
+        elif action == "delete":
+            script.scenes = [s for s in script.scenes if s.id not in scene_ids]
+        else:
+            raise HTTPException(400, f"Unknown action: {action}")
+
+        _snapshot_script(Path(ep_info.script_path))
+        script.save()
+        project.mark_updated()
+        project.save()
+        return {"status": "ok", "action": action, "count": len(targets)}
+
     # ── API: Scene reorder (drag-and-drop) ─────────────────────────
 
     @app.put("/api/projects/{name}/episodes/{num}/reorder")

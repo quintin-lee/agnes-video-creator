@@ -950,6 +950,39 @@ const App = {
     if(counter)counter.textContent=q?`${count} matching`:"";
   },
 
+  _getSelected(){return this.__selScenes||[]},
+  _toggleSceneSelection(id){
+    let s=this.__selScenes||[];
+    const idx=s.indexOf(id);
+    if(idx>=0)s.splice(idx,1);else s.push(id);
+    this.__selScenes=s;
+    const bar=document.getElementById("batch-bar");
+    const cnt=document.getElementById("batch-count");
+    const cb=document.querySelector(".sel-cb-"+id);
+    if(cb)cb.checked=s.includes(id);
+    if(bar&&cnt){
+      if(s.length){bar.style.display="flex";cnt.textContent=s.length+" selected";}
+      else{bar.style.display="none";cnt.textContent="";}
+    }
+  },
+  _clearSceneSelection(){
+    this.__selScenes=[];
+    document.querySelectorAll("[class^=sel-cb-]").forEach(cb=>cb.checked=false);
+    const bar=document.getElementById("batch-bar");
+    if(bar)bar.style.display="none";
+  },
+  async batchSceneAction(name,ep,action){
+    const ids=this.__selScenes||[];
+    if(!ids.length)return;
+    if(action==="delete"&&!confirm("Delete "+ids.length+" scene(s)?"))return;
+    try{
+      await this.api("/api/projects/"+encodeURIComponent(name)+"/episodes/"+ep+"/batch/scene",
+        {method:"POST",body:JSON.stringify({action,scene_ids:ids})});
+      this._clearSceneSelection();
+      this.renderEpisode(name,ep);
+    }catch(e){alert("Batch action failed: "+e.message)}
+  },
+
   _pollProject(name){
     this._stopPoll();
     this._poller=setInterval(async()=>{
@@ -991,7 +1024,9 @@ const App = {
           ondragend="this.classList.remove('dragging')"
           ondragover="event.preventDefault();this.parentNode.querySelectorAll('.scene-card').forEach(c=>c.classList.remove('drag-over'));this.classList.add('drag-over')"
           ondragleave="this.classList.remove('drag-over')"
-          ondrop="event.preventDefault();App.reorderScenes('${this.esc(name)}',${ep},parseInt(event.dataTransfer.getData('text/plain')),${s.id})"><div class="img-wrap">${
+          ondrop="event.preventDefault();App.reorderScenes('${this.esc(name)}',${ep},parseInt(event.dataTransfer.getData('text/plain')),${s.id})"><span class="batch-cb" style="position:absolute;top:4px;left:4px;z-index:5;background:rgba(0,0,0,.5);border-radius:3px;padding:2px" onclick="event.stopPropagation();App._toggleSceneSelection(${s.id})">
+            <input type="checkbox" class="sel-cb-${s.id}" onchange="event.stopPropagation();App._toggleSceneSelection(${s.id})" style="cursor:pointer">
+          </span><div class="img-wrap">${
         vidSrc?`<video src="${vidSrc}" controls preload="metadata" style="width:100%;height:100%;object-fit:contain"></video>`
         :imgSrc?`<img src="${imgSrc}" alt="Scene ${s.id}" loading="lazy">`
         :`<div class="ph">(no image)</div>`
@@ -1043,6 +1078,15 @@ const App = {
             <input id="scene-search" type="text" placeholder="Search scenes by narration, dialogue, or prompt..." oninput="App.filterScenes(this.value)"
               style="flex:1;background:var(--surface3);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:5px 8px;font-size:.85em">
             <span id="scene-count" class="text-sm text-muted" style="align-self:center"></span>
+          </div>
+          <div id="batch-bar" style="display:none;align-items:center;gap:6px;margin-bottom:10px;padding:6px 10px;background:var(--surface2);border:1px solid var(--accent);border-radius:6px">
+            <span id="batch-count" class="text-sm" style="font-weight:600"></span>
+            <button class="btn btn-small btn-outline" onclick="App.batchSceneAction('${this.esc(name)}',${ep},'lock')" style="font-size:.75em">Lock</button>
+            <button class="btn btn-small btn-outline" onclick="App.batchSceneAction('${this.esc(name)}',${ep},'unlock')" style="font-size:.75em">Unlock</button>
+            <button class="btn btn-small btn-outline" onclick="App.batchSceneAction('${this.esc(name)}',${ep},'regen_images')" style="font-size:.75em">Regen Images</button>
+            <button class="btn btn-small btn-outline" onclick="App.batchSceneAction('${this.esc(name)}',${ep},'regen_videos')" style="font-size:.75em">Regen Videos</button>
+            <button class="btn btn-small btn-danger" onclick="App.batchSceneAction('${this.esc(name)}',${ep},'delete')" style="font-size:.75em">Delete</button>
+            <button class="btn btn-small" onclick="App._clearSceneSelection()" style="font-size:.75em;margin-left:auto">Clear</button>
           </div>
           ${timelineBar}<div class="scene-grid" id="scene-grid">${sceneCards}</div></div>
         ${data.output_path?`<div class="card"><h2>Output</h2>
