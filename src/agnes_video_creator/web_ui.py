@@ -734,6 +734,62 @@ def create_app() -> FastAPI:
 
         return FileResponse(str(storyboard_path), media_type="text/html")
 
+    # ── API: Asset library ───────────────────────────────────────────
+
+    @app.get("/api/assets")
+    def list_assets(project: str = Query(""), media_type: str = Query("")):
+        """List all generated images and videos across projects."""
+        from agnes_video_creator.models import Script
+
+        root = _projects_dir()
+        if not root.exists():
+            return {"assets": []}
+
+        projects = _discover_projects()
+        items = []
+        for p in projects:
+            pname = p["name"]
+            if project and project != pname:
+                continue
+            proj_root = root / pname
+            for ep in p.get("episodes", []):
+                ep_num = ep["number"]
+                script_path = proj_root / f"episodes/{ep_num}/script.json"
+                scenes = []
+                if script_path.exists():
+                    try:
+                        script = Script.load(script_path)
+                        scenes = script.scenes or []
+                    except Exception:
+                        scenes = []
+                for s in scenes:
+                    label = s.narration or s.visual_prompt or f"Scene {s.id}"
+                    if s.image_path and Path(s.image_path).exists():
+                        rel = Path(s.image_path).relative_to(root)
+                        items.append({
+                            "type": "image",
+                            "project": pname,
+                            "episode": ep_num,
+                            "scene_id": s.id,
+                            "path": str(s.image_path),
+                            "url": f"/api/projects/{pname}/images/{ep_num}/images/{Path(s.image_path).name}",
+                            "label": label[:80],
+                        })
+                    if s.video_path and Path(s.video_path).exists():
+                        items.append({
+                            "type": "video",
+                            "project": pname,
+                            "episode": ep_num,
+                            "scene_id": s.id,
+                            "path": str(s.video_path),
+                            "url": f"/api/projects/{pname}/videos/{Path(s.video_path).name}",
+                            "label": label[:80],
+                        })
+        if media_type:
+            items = [a for a in items if a["type"] == media_type]
+        filtered = items
+        return {"assets": filtered, "total": len(filtered)}
+
     # ── API: Serve scene images ─────────────────────────────────────
 
     @app.get("/api/projects/{name}/images/{episode_num:path}")

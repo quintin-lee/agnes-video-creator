@@ -157,6 +157,7 @@ a:hover{text-decoration:underline}
   <span class="brand-sub">creator</span>
   <span class="spacer"></span>
   <a href="#/batch" style="font-size:.85em;color:var(--text2);margin-right:12px">Batch</a>
+  <a href="#/assets" style="font-size:.85em;color:var(--text2);margin-right:12px">Assets</a>
   <span class="dot on" title="Connected"></span>
 </nav>
 <div id="key-banner" class="hidden" style="background:var(--red);color:#fff;text-align:center;padding:6px 16px;font-size:.85em">
@@ -181,6 +182,7 @@ const App = {
     const h=location.hash.slice(1)||"/";
     if(h==="/")return this.renderDashboard();
     if(h==="/batch")return this.renderBatch();
+    if(h==="/assets")return this.renderAssets();
     let m=h.match(/^\/projects\/([^/]+)$/);
     if(m)return this.renderProject(decodeURIComponent(m[1]));
     m=h.match(/^\/projects\/([^/]+)\/episodes\/(\d+)$/);
@@ -287,6 +289,55 @@ const App = {
       </div>`;
     this._poller=setInterval(()=>{this.renderBatch()},5000);
     this._connectBatchSSE();
+  },
+
+  async renderAssets(){
+    this._stopPoll();
+    const el=this.$("#app");el.innerHTML=`<div class="pulse text-muted" style="text-align:center;padding:60px">Scanning assets...</div>`;
+    let data;
+    try{
+      const params=new URLSearchParams();
+      const ft=this._asFilter||"";if(ft)params.set("media_type",ft);
+      const fp=this._apFilter||"";if(fp)params.set("project",fp);
+      data=await this.api("/api/assets?"+params.toString())
+    }catch(e){el.innerHTML=`<div class="empty-state"><p style="color:var(--red)">${e.message}</p></div>`;return}
+
+    const assets=data.assets||[];
+    const imgs=assets.filter(a=>a.type==="image");
+    const vids=assets.filter(a=>a.type==="video");
+    const type=ft||"all";
+
+    const grid=assets.map(a=>{
+      if(a.type==="image"){
+        return `<div class="scene-card" style="cursor:default">
+          <div class="img-wrap"><img src="${this.esc(a.url)}" alt="${this.esc(a.label)}" loading="lazy" style="width:100%;height:140px;object-fit:cover"></div>
+          <div class="body" style="padding:6px 8px">
+            <div style="font-size:.8em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${this.esc(a.label)}</div>
+            <div class="text-xs text-muted">${this.esc(a.project)} EP${a.episode} S${a.scene_id}</div>
+          </div></div>`;
+      }
+      return `<div class="scene-card" style="cursor:default">
+        <div style="background:#000;border-radius:4px;overflow:hidden">
+          <video src="${this.esc(a.url)}" preload="metadata" style="width:100%;height:140px;object-fit:contain" controls></video>
+        </div>
+        <div class="body" style="padding:6px 8px">
+          <div style="font-size:.8em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${this.esc(a.label)}</div>
+          <div class="text-xs text-muted">${this.esc(a.project)} EP${a.episode} S${a.scene_id}</div>
+        </div></div>`;
+    }).join("")||'<div class="empty" style="text-align:center;padding:40px;color:var(--text3)">No assets found.</div>';
+
+    el.innerHTML=`<div class="page-title">Asset Library</div>
+      <div class="text-sm text-muted page-sub">${data.total||0} items (${imgs.length} images, ${vids.length} videos)</div>
+      <div class="card" style="margin-bottom:12px"><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <select id="af-type" style="background:var(--surface3);border:1px solid var(--border);color:var(--text);border-radius:3px;padding:4px 8px;font-size:.85em" onchange="App._asFilter=this.value;App.renderAssets()">
+          <option value="">All media</option>
+          <option value="image" ${ft==="image"?"selected":""}>Images</option>
+          <option value="video" ${ft==="video"?"selected":""}>Videos</option>
+        </select>
+        <input id="af-project" type="text" placeholder="Filter project..." value="${this.esc(fp)}" style="background:var(--surface3);border:1px solid var(--border);color:var(--text);border-radius:3px;padding:4px 8px;font-size:.85em;width:140px" oninput="App._apFilter=this.value">
+        <button class="btn btn-small btn-primary" onclick="App.renderAssets()" style="font-size:.85em">Apply</button>
+      </div></div>
+      <div class="project-grid">${grid}</div>`;
   },
 
   _connectBatchSSE(){
