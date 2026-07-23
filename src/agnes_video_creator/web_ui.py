@@ -1035,6 +1035,25 @@ def create_app() -> FastAPI:
         project.save()
         return {"status": "ok", "scene_ids": [s.id for s in scenes]}
 
+    @app.put("/api/projects/{name}/reorder")
+    async def reorder_episodes(name: str, request: Request):
+        """Reorder episodes. Expects {"episode_numbers": [2, 1, 3]}."""
+        root = _projects_dir() / name
+        proj_file = root / "project.json"
+        if not proj_file.exists():
+            raise HTTPException(404, f"Project '{name}' not found")
+        project = Project.load(proj_file)
+        body = await request.json()
+        new_order = body.get("episode_numbers", [])
+        if not new_order:
+            raise HTTPException(400, "episode_numbers required")
+        try:
+            project.reorder_episodes(new_order)
+        except ValueError as e:
+            raise HTTPException(400, str(e))
+        project.save()
+        return {"status": "ok", "episode_numbers": [e.number for e in project.episodes]}
+
     # ── API: Scene trim ─────────────────────────────────────────────
 
     @app.put("/api/projects/{name}/episodes/{num}/scene/{scene_id}/trim")

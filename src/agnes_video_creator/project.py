@@ -177,6 +177,13 @@ class Project:
         episodes = [EpisodeInfo(**e) for e in data.pop("episodes", [])]
         return cls(episodes=episodes, **data)
 
+    def reorder_episodes(self, new_order: list[int]) -> None:
+        """Reorder episodes by their numbers. new_order must be a permutation of existing episode numbers."""
+        by_num = {e.number: e for e in self.episodes}
+        if set(by_num) != set(new_order):
+            raise ValueError("new_order must include all episode numbers exactly once")
+        self.episodes = [by_num[n] for n in new_order]
+
     # ── Character helpers ───────────────────────────────────────────
 
     def get_characters(self) -> list[Character]:

@@ -123,6 +123,8 @@ a:hover{text-decoration:underline}
 .scene-card .si .d.no{background:var(--text3)}
 .scene-card.dragging{opacity:.4}
 .scene-card.drag-over{border-color:var(--accent)!important;box-shadow:0 0 0 2px var(--accent)}
+tr[draggable].dragging{opacity:.4}
+tr[draggable].drag-over{outline:2px solid var(--accent);outline-offset:-2px}
 
 .ep-header{margin-bottom:20px}
 .ep-header h2{font-size:1.2em;font-weight:600}
@@ -545,7 +547,13 @@ const App = {
     try{data=await this.api("/api/projects/"+encodeURIComponent(name))}
     catch(e){el.innerHTML=`<div class="empty-state"><p style="color:var(--red)">${e.message}</p><p class="text-sm mt-2"><a href="#/">Back</a></p></div>`;return}
     this.__projectData=data;
-    const epRows=data.episodes.map(e=>`<tr onclick="App.navigate('/projects/${encodeURIComponent(name)}/episodes/${e.number}')">
+    const epRows=data.episodes.map(e=>`<tr draggable="true" data-ep="${e.number}"
+        ondragstart="event.dataTransfer.setData('text/plain','${e.number}');this.classList.add('dragging')"
+        ondragend="this.classList.remove('dragging')"
+        ondragover="event.preventDefault();this.parentNode.querySelectorAll('tr[draggable]').forEach(r=>r.classList.remove('drag-over'));this.classList.add('drag-over')"
+        ondragleave="this.classList.remove('drag-over')"
+        ondrop="event.preventDefault();App.reorderEpisodes('${this.esc(name)}',parseInt(event.dataTransfer.getData('text/plain')),parseInt(this.dataset.ep))"
+        onclick="App.navigate('/projects/${encodeURIComponent(name)}/episodes/${e.number}')">
       <td><strong>EP${String(e.number).padStart(2,"0")}</strong></td>
       <td class="truncate" style="max-width:200px">${this.esc(e.title||"(untitled)")}</td>
       <td><span class="status-tag ${this.sc(e.status)}">${this.sl(e.status)}</span></td>
@@ -709,6 +717,22 @@ const App = {
       await this.api("/api/projects/"+encodeURIComponent(name)+"/episodes/"+ep+"/reorder",
         {method:"PUT",body:JSON.stringify({dragged_id:draggedId,target_id:targetId})});
       this.loadEpisode(name,ep);
+    }catch(e){alert("Reorder failed: "+e.message)}
+  },
+
+  async reorderEpisodes(name,draggedNum,targetNum){
+    if(draggedNum===targetNum)return;
+    try{
+      const data=await this.api("/api/projects/"+encodeURIComponent(name));
+      const nums=data.episodes.map(e=>e.number);
+      const srcIdx=nums.indexOf(draggedNum);
+      const dstIdx=nums.indexOf(targetNum);
+      if(srcIdx<0||dstIdx<0)return;
+      nums.splice(srcIdx,1);
+      nums.splice(dstIdx,0,draggedNum);
+      await this.api("/api/projects/"+encodeURIComponent(name)+"/reorder",
+        {method:"PUT",body:JSON.stringify({episode_numbers:nums})});
+      this.renderProject(name);
     }catch(e){alert("Reorder failed: "+e.message)}
   },
 
